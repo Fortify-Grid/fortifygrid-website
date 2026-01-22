@@ -1,4 +1,4 @@
-# FortifyGrid Website
+# FortifyGrid
 
 AI-Driven, Modular Solutions for a Resilient, Adaptive Grid.
 
