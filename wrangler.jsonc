@@ -1,0 +1,37 @@
+{
+  "name": "fortifygrid-website",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  // fortifygrid.com is public; /dashboard and every app host sit behind Cloudflare Access.
+  // workers.dev and preview URLs are off so there is no address that skips Access.
+  "routes": [
+    { "pattern": "fortifygrid.com", "custom_domain": true },
+    { "pattern": "www.fortifygrid.com", "custom_domain": true }
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/dashboard/api/*"]
+  },
+  "vars": {
+    // Not secrets: Cloudflare puts these in every login token. Filled in by infra/cf-setup.mjs output.
+    "CF_ACCESS_TEAM_DOMAIN": "REPLACE_TEAM.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "REPLACE_DASHBOARD_AUD",
+    // Always full admins, even before they are in the database. Comma-separated.
+    "ADMIN_EMAILS": "krishnan@fortifygrid.com",
+    "CF_ACCOUNT_ID": "REPLACE_ACCOUNT_ID",
+    // Access group for /dashboard, kept in sync with the user list (every active user). App groups live in D1 apps.
+    "PORTAL_GROUP_ID": "REPLACE_PORTAL_GROUP_ID",
+    "EMAIL_FROM": "",
+    "EMAIL_REPLY_TO": "krishnan@fortifygrid.com"
+    // Secrets (npx wrangler secret put …): CF_API_TOKEN (Access: Groups + Apps and Policies edit), EMAIL_API_KEY (optional).
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "fortifygrid-portal", "database_id": "REPLACE_D1_ID" }
+  ],
+  "observability": { "enabled": true }
+}

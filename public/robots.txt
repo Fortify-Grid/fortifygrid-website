@@ -1,0 +1,3 @@
+User-agent: *
+Disallow: /dashboard/
+Sitemap: https://fortifygrid.com/sitemap.xml

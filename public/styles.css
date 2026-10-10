@@ -8,28 +8,28 @@
 
 @font-face {
     font-family: 'Satoshi';
-    src: url('https://cdn.prod.website-files.com/6736dd5a3081c447e607b3b5/6736dd5a3081c447e607b421_Satoshi-Light.otf') format('opentype');
+    src: url('/assets/satoshi-light.otf') format('opentype');
     font-weight: 300;
     font-style: normal;
 }
 
 @font-face {
     font-family: 'Satoshi';
-    src: url('https://cdn.prod.website-files.com/6736dd5a3081c447e607b3b5/6736dd5a3081c447e607b423_Satoshi-Regular.otf') format('opentype');
+    src: url('/assets/satoshi-regular.otf') format('opentype');
     font-weight: 400;
     font-style: normal;
 }
 
 @font-face {
     font-family: 'Satoshi';
-    src: url('https://cdn.prod.website-files.com/6736dd5a3081c447e607b3b5/6736dd5a3081c447e607b420_Satoshi-Medium.otf') format('opentype');
+    src: url('/assets/satoshi-medium.otf') format('opentype');
     font-weight: 500;
     font-style: normal;
 }
 
 @font-face {
     font-family: 'Satoshi';
-    src: url('https://cdn.prod.website-files.com/6736dd5a3081c447e607b3b5/6736dd5a3081c447e607b425_Satoshi-Bold.otf') format('opentype');
+    src: url('/assets/satoshi-bold.otf') format('opentype');
     font-weight: 700;
     font-style: normal;
 }
@@ -250,7 +250,7 @@ a {
     left: 0;
     right: 0;
     bottom: 0;
-    background-image: url('https://cdn.prod.website-files.com/6736dd5a3081c447e607b3b5/673c73e5de5789b88ab4d61e_banner-img1.jpg');
+    background-image: url('/assets/banner-img1.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -425,7 +425,7 @@ a {
    ================================================ */
 .problem-section {
     background-image: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
-                      url('https://cdn.prod.website-files.com/6736dd5a3081c447e607b413/6736dd5a3081c447e607b433_Hero%201-min.webp');
+                      url('/assets/hero-1-min.webp');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
@@ -465,7 +465,7 @@ a {
    ================================================ */
 .solution-section {
     background-image: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.75)), 
-                      url('https://cdn.prod.website-files.com/6736dd5a3081c447e607b413/6736dd5a3081c447e607b475_Hero%202-min.webp');
+                      url('/assets/hero-2-min.webp');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
@@ -871,7 +871,7 @@ a {
    ================================================ */
 .footer {
     background-color: var(--color-forest-green);
-    background-image: url('https://cdn.prod.website-files.com/6736dd5a3081c447e607b3b5/67384525eaf871225bde32f3_footer-bg.svg');
+    background-image: url('/assets/footer-bg.svg');
     background-size: cover;
     background-position: center;
     padding: 60px 0 40px;
@@ -1149,4 +1149,11 @@ a {
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
     border: 0;
+}
+
+/* Sign in link to the app dashboard */
+.nav-links a.nav-signin {
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    padding: 4px 12px;
 }

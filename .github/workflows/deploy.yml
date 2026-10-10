@@ -1,0 +1,35 @@
+# Push to main → apply schema (idempotent) and deploy fortifygrid.com + /dashboard to Cloudflare.
+# Repo secrets: CLOUDFLARE_API_TOKEN (Workers Scripts:Edit, Workers Routes:Edit, D1:Edit, Zone:Read) and CLOUDFLARE_ACCOUNT_ID.
+# Deploy this before any app Worker (apps bind to its Directory entrypoint).
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: deploy-website
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip until Cloudflare secrets are set
+        if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "::warning::Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repo secrets to enable deploys."
+      - name: Refuse to deploy unfinished config
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          if grep -n 'REPLACE_' wrangler.jsonc; then echo "::error::wrangler.jsonc still has REPLACE_* placeholders. Run infra/cf-setup.mjs first (INFRA.md §7)."; exit 1; fi
+      - uses: actions/setup-node@v4
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        with:
+          node-version: 22
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npm install --no-audit --no-fund
+      - if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npm run deploy

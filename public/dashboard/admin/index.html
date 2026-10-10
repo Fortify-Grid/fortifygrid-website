@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FortifyGrid Admin</title>
+  <link rel="icon" type="image/png" href="/assets/favicon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/dashboard/portal.css">
+</head>
+<body>
+  <header>
+    <a href="/"><img src="/assets/fortify-logo.svg" alt="FortifyGrid"></a>
+    <nav>
+      <span id="who" class="muted"></span>
+      <a href="/dashboard/">Apps</a>
+      <a href="/cdn-cgi/access/logout">Sign out</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Admin</h1>
+    <p class="muted" id="status"></p>
+    <div class="tabs" role="tablist">
+      <button class="tab" data-tab="users">Users</button>
+      <button class="tab" data-tab="apps">Apps</button>
+      <button class="tab" data-tab="settings">Settings</button>
+      <button class="tab" data-tab="activity">Activity</button>
+    </div>
+    <div id="msg" class="msg" hidden></div>
+
+    <section data-panel="users">
+      <p class="muted">Add someone and pick their role in each app. They sign in with Google or a one-time email code.</p>
+      <form class="add" id="add-user">
+        <label>Email<input type="email" name="email" required placeholder="name@company.com"></label>
+        <label>Name<input type="text" name="person" placeholder="optional"></label>
+        <span id="app-fields" style="display:contents"></span>
+        <label class="check"><input type="checkbox" name="is_admin"> Admin</label>
+        <label class="check"><input type="checkbox" name="invite" checked> Send invite</label>
+        <button type="submit">Add / update</button>
+      </form>
+      <div class="table-wrap"><table><thead id="users-head"></thead><tbody id="users"></tbody></table></div>
+      <p class="row-actions" style="margin-top:12px"><button class="ghost" id="resync">Re-sync Cloudflare Access</button></p>
+    </section>
+
+    <section data-panel="apps" hidden>
+      <p class="muted">Apps shown as dashboard tiles. A new app also needs its Worker deployed (INFRA.md → New app).</p>
+      <form class="add" id="add-app">
+        <label>Id<input type="text" name="id" required placeholder="heatmap" pattern="[a-z][a-z0-9-]{1,30}"></label>
+        <label>Name<input type="text" name="title" required placeholder="Grid Heatmap"></label>
+        <label>URL<input type="text" name="url" required placeholder="https://heatmap.fortifygrid.com/"></label>
+        <label>Roles (lowest first)<input type="text" name="roles" value="viewer,admin"></label>
+        <label style="flex:1 1 240px">Description<input type="text" name="description"></label>
+        <label class="check"><input type="checkbox" name="provision" checked> Create Cloudflare Access</label>
+        <button type="submit">Add / update app</button>
+      </form>
+      <div class="table-wrap"><table>
+        <thead><tr><th>App</th><th>URL</th><th>Roles</th><th>Cloudflare Access</th><th>On</th><th></th></tr></thead>
+        <tbody id="apps"></tbody>
+      </table></div>
+    </section>
+
+    <section data-panel="settings" hidden>
+      <p class="muted">Site configuration. <code>dashboard_notice</code> shows as a banner on everyone's dashboard.</p>
+      <form class="add" id="add-setting">
+        <label>Key<input type="text" name="key" required placeholder="dashboard_notice" pattern="[a-z][a-z0-9_]{1,40}"></label>
+        <label style="flex:1 1 320px">Value<input type="text" name="value"></label>
+        <button type="submit">Save</button>
+      </form>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Key</th><th>Value</th><th>Updated</th><th></th></tr></thead>
+        <tbody id="settings"></tbody>
+      </table></div>
+      <h3>Sign-in</h3>
+      <div class="table-wrap"><table><tbody id="logins"></tbody></table></div>
+    </section>
+
+    <section data-panel="activity" hidden>
+      <div class="table-wrap"><table><tbody id="audit"></tbody></table></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { api, esc, showMsg } from '/dashboard/portal.js';
+    const $ = (id) => document.getElementById(id);
+    const msg = $('msg');
+    const when = (s) => (s ? esc(s.slice(0, 16).replace('T', ' ')) : 'never');
+    let state = { users: [], apps: [], settings: [], logins: [] };
+
+    /* tabs (remembered in the URL hash) */
+    function showTab(name) {
+      document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
+      document.querySelectorAll('[data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== name; });
+      if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
+      if (name === 'activity') loadAudit().catch((e) => showMsg(msg, e.message, 'err'));
+    }
+    document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+    addEventListener('hashchange', () => showTab(location.hash.slice(1) || 'users'));
+
+    const roleSelect = (app, value, attrs = '') =>
+      `<select ${attrs} data-app="${esc(app.id)}"><option value="">— none —</option>${app.roles
+        .map((r) => `<option value="${esc(r)}"${r === value ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select>`;
+
+    function inviteFallback(invite, email) {
+      if (!invite || invite.sent) return;
+      // No email service configured: open the message in the admin's own mail app.
+      location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(invite.subject)}&body=${encodeURIComponent(invite.text)}`;
+    }
+    const report = (r, done) => showMsg(msg, [done, r.note, r.sync?.note].filter(Boolean).join(' '), r.sync && !r.sync.synced ? '' : 'ok');
+
+    function render() {
+      const apps = state.apps.filter((a) => a.enabled);
+      $('status').textContent = [
+        state.access_sync ? 'Cloudflare Access sync on.' : 'Cloudflare Access sync off (CF_API_TOKEN not set): manage Access groups by hand.',
+        state.team_domain ? `Team: ${state.team_domain}` : '',
+      ].join(' ');
+
+      $('app-fields').innerHTML = apps.map((a) => `<label>${esc(a.name)}${roleSelect(a, '', 'name="app"')}</label>`).join('');
+      $('users-head').innerHTML =
+        `<tr><th>User</th>${apps.map((a) => `<th>${esc(a.name)}</th>`).join('')}<th>Admin</th><th>Active</th><th>Last seen</th><th></th></tr>`;
+      $('users').innerHTML = state.users.map((u) => `
+        <tr data-email="${esc(u.email)}">
+          <td><b>${esc(u.email)}</b><br><span class="muted">${esc(u.name)}${u.bootstrap ? ' · owner' : ''}</span></td>
+          ${apps.map((a) => `<td>${roleSelect(a, u.apps[a.id] || '', 'class="edit"')}</td>`).join('')}
+          <td><input type="checkbox" class="edit" data-field="is_admin"${u.is_admin ? ' checked' : ''}></td>
+          <td><input type="checkbox" class="edit" data-field="active"${u.active ? ' checked' : ''}></td>
+          <td class="muted">${when(u.last_seen_at)}</td>
+          <td class="row-actions"><button class="ghost" data-act="invite">Invite</button><button class="danger" data-act="delete">Remove</button></td>
+        </tr>`).join('') || '<tr><td>No users yet.</td></tr>';
+
+      $('apps').innerHTML = state.apps.map((a) => `
+        <tr data-id="${esc(a.id)}">
+          <td><b>${esc(a.name)}</b><br><span class="muted">${esc(a.id)} · ${esc(a.description)}</span></td>
+          <td><a href="${esc(a.url)}">${esc(a.url)}</a></td>
+          <td>${esc(a.roles.join(', '))}</td>
+          <td class="muted">${a.access_aud ? `ready<br><small>group ${esc(a.access_group_id.slice(0, 8))}…</small>` : 'not set up'}</td>
+          <td><input type="checkbox" data-act="toggle"${a.enabled ? ' checked' : ''}></td>
+          <td class="row-actions"><button class="ghost" data-act="edit">Edit</button>${a.access_aud ? '' : '<button data-act="provision">Create Access</button>'}</td>
+        </tr>`).join('') || '<tr><td>No apps yet.</td></tr>';
+
+      $('settings').innerHTML = state.settings.map((s) => `
+        <tr data-key="${esc(s.key)}"><td><code>${esc(s.key)}</code></td><td>${esc(s.value)}</td>
+        <td class="muted">${when(s.updated_at)} · ${esc(s.updated_by)}</td>
+        <td class="row-actions"><button class="ghost" data-act="edit">Edit</button><button class="danger" data-act="delete">Delete</button></td></tr>`).join('')
+        || '<tr><td class="muted">No settings yet.</td></tr>';
+      $('logins').innerHTML = state.logins.length
+        ? state.logins.map((l) => `<tr><td>${esc(l.name)}</td><td class="muted">${esc(l.type)}</td></tr>`).join('')
+        : '<tr><td class="muted">Login methods are managed in Cloudflare Zero Trust → Settings → Authentication (Google + One-time PIN).</td></tr>';
+    }
+
+    async function load() { state = await api('admin/overview'); render(); }
+    async function loadAudit() {
+      const rows = await api('admin/audit');
+      $('audit').innerHTML = rows.map((a) =>
+        `<tr><td class="muted">${when(a.at)}</td><td>${esc(a.actor)}</td><td>${esc(a.action)}</td><td>${esc(a.target)}</td><td class="muted">${esc(a.detail)}</td></tr>`).join('')
+        || '<tr><td class="muted">Nothing yet.</td></tr>';
+    }
+    const run = (fn) => async (e) => { try { await fn(e); } catch (err) { showMsg(msg, err.message, 'err'); await load().catch(() => {}); } };
+
+    /* users */
+    $('add-user').addEventListener('submit', run(async (e) => {
+      e.preventDefault();
+      const f = e.target, apps = {};
+      f.querySelectorAll('select[name=app]').forEach((s) => { if (s.value) apps[s.dataset.app] = s.value; });
+      const email = f.email.value.trim().toLowerCase();
+      const r = await api('admin/users', { method: 'POST', body: { email, name: f.person.value, apps, is_admin: f.is_admin.checked, invite: f.invite.checked } });
+      report(r, `Saved ${email}.`);
+      inviteFallback(r.invite, email);
+      f.reset();
+      await load();
+    }));
+    function userPayload(tr) {
+      const u = state.users.find((x) => x.email === tr.dataset.email), apps = {};
+      tr.querySelectorAll('select[data-app]').forEach((s) => { if (s.value) apps[s.dataset.app] = s.value; });
+      // Keep roles in disabled apps (not shown as columns).
+      for (const a of state.apps) if (!a.enabled && u.apps[a.id]) apps[a.id] = u.apps[a.id];
+      return { email: u.email, name: u.name, apps, is_admin: tr.querySelector('[data-field=is_admin]').checked, active: tr.querySelector('[data-field=active]').checked };
+    }
+    $('users').addEventListener('change', run(async (e) => {
+      if (!e.target.classList.contains('edit')) return;
+      const tr = e.target.closest('tr');
+      report(await api('admin/users', { method: 'POST', body: userPayload(tr) }), `Updated ${tr.dataset.email}.`);
+      await load();
+    }));
+    $('users').addEventListener('click', run(async (e) => {
+      const act = e.target.dataset.act;
+      if (!act) return;
+      const email = e.target.closest('tr').dataset.email;
+      if (act === 'delete') {
+        if (!confirm(`Remove ${email}? They lose access to every app.`)) return;
+        report(await api(`admin/users/${encodeURIComponent(email)}`, { method: 'DELETE' }), `Removed ${email}.`);
+      } else if (act === 'invite') {
+        const r = await api(`admin/users/${encodeURIComponent(email)}/invite`, { method: 'POST', body: {} });
+        showMsg(msg, r.invite.sent ? `Invite sent to ${email}.` : 'Opening the invite in your mail app.', 'ok');
+        inviteFallback(r.invite, email);
+      }
+      await load();
+    }));
+    $('resync').addEventListener('click', run(async () => {
+      const r = await api('admin/sync', { method: 'POST', body: {} });
+      showMsg(msg, r.note, r.synced ? 'ok' : 'err');
+    }));
+
+    /* apps */
+    const appBody = (a, extra = {}) => ({ id: a.id, name: a.name, url: a.url, roles: a.roles.join(','), description: a.description, enabled: a.enabled, sort: a.sort, ...extra });
+    $('add-app').addEventListener('submit', run(async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const r = await api('admin/apps', { method: 'POST', body: {
+        id: f.id.value, name: f.title.value, url: f.url.value, roles: f.roles.value, description: f.description.value, provision: f.provision.checked,
+      } });
+      report(r, `Saved app ${r.id}.`);
+      f.reset();
+      await load();
+    }));
+    $('apps').addEventListener('click', run(async (e) => {
+      const act = e.target.dataset.act;
+      if (!act || act === 'toggle') return;
+      const a = state.apps.find((x) => x.id === e.target.closest('tr').dataset.id);
+      if (act === 'edit') {
+        const f = $('add-app');
+        f.id.value = a.id; f.title.value = a.name; f.url.value = a.url; f.roles.value = a.roles.join(','); f.description.value = a.description;
+        f.provision.checked = !a.access_aud;
+        f.scrollIntoView({ behavior: 'smooth' });
+      } else if (act === 'provision') {
+        report(await api('admin/apps', { method: 'POST', body: appBody(a, { provision: true }) }), `${a.name}:`);
+        await load();
+      }
+    }));
+    $('apps').addEventListener('change', run(async (e) => {
+      if (e.target.dataset.act !== 'toggle') return;
+      const a = state.apps.find((x) => x.id === e.target.closest('tr').dataset.id);
+      report(await api('admin/apps', { method: 'POST', body: appBody(a, { enabled: e.target.checked }) }), `${a.name} ${e.target.checked ? 'enabled' : 'disabled'}.`);
+      await load();
+    }));
+
+    /* settings */
+    $('add-setting').addEventListener('submit', run(async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      await api('admin/settings', { method: 'POST', body: { key: f.key.value, value: f.value.value } });
+      showMsg(msg, `Saved ${f.key.value}.`, 'ok');
+      f.reset();
+      await load();
+    }));
+    $('settings').addEventListener('click', run(async (e) => {
+      const act = e.target.dataset.act;
+      if (!act) return;
+      const key = e.target.closest('tr').dataset.key;
+      if (act === 'edit') {
+        const f = $('add-setting'), s = state.settings.find((x) => x.key === key);
+        f.key.value = s.key; f.value.value = s.value;
+      } else if (act === 'delete' && confirm(`Delete setting ${key}?`)) {
+        await api(`admin/settings/${encodeURIComponent(key)}`, { method: 'DELETE' });
+        showMsg(msg, `Deleted ${key}.`, 'ok');
+        await load();
+      }
+    }));
+
+    try {
+      const me = await api('me');
+      $('who').textContent = me.email;
+      if (!me.admin) throw new Error('Admins only.');
+      await load();
+      showTab((location.hash || '#users').slice(1));
+    } catch (err) { showMsg(msg, err.message, 'err'); }
+  </script>
+</body>
+</html>

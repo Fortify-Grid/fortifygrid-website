@@ -1,0 +1,3 @@
+# Copy to .dev.vars for `npm run dev`. Never used in production.
+ENVIRONMENT=development
+DEV_USER_EMAIL=krishnan@fortifygrid.com

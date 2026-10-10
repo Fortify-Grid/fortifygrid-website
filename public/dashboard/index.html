@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FortifyGrid Dashboard</title>
+  <link rel="icon" type="image/png" href="/assets/favicon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/dashboard/portal.css">
+</head>
+<body>
+  <header>
+    <a href="/"><img src="/assets/fortify-logo.svg" alt="FortifyGrid"></a>
+    <nav>
+      <span id="who" class="muted"></span>
+      <a id="admin-link" href="/dashboard/admin/" hidden>Manage users</a>
+      <a href="/cdn-cgi/access/logout">Sign out</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Your apps</h1>
+    <p class="muted">Apps you have been given access to. Ask an admin if one is missing.</p>
+    <div id="notice" class="msg" hidden></div>
+    <div id="msg" class="msg" hidden></div>
+    <div id="tiles" class="tiles"></div>
+  </main>
+  <script type="module">
+    import { api, esc, showMsg } from '/dashboard/portal.js';
+    const msg = document.getElementById('msg');
+    try {
+      const me = await api('me');
+      document.getElementById('who').textContent = me.email;
+      document.getElementById('admin-link').hidden = !me.admin;
+      if (me.notice) showMsg(document.getElementById('notice'), me.notice);
+      document.getElementById('tiles').innerHTML = me.apps.length
+        ? me.apps.map((a) => `<a class="tile" href="${esc(a.url)}"><h2>${esc(a.name)}</h2><p class="muted">${esc(a.description)}</p><span class="role">${esc(a.role)}</span></a>`).join('')
+        : '';
+      if (!me.apps.length) showMsg(msg, 'No apps yet. Ask a FortifyGrid admin to give you access.');
+    } catch (e) {
+      showMsg(msg, e.message, 'err');
+    }
+  </script>
+</body>
+</html>

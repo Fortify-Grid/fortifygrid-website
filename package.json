@@ -1,0 +1,16 @@
+{
+  "name": "fortifygrid-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "db:schema": "wrangler d1 execute fortifygrid-portal --remote --file=schema.sql",
+    "db:schema:local": "wrangler d1 execute fortifygrid-portal --local --file=schema.sql",
+    "check": "wrangler deploy --dry-run --outdir .wrangler/dry",
+    "deploy": "npm run db:schema && wrangler deploy",
+    "setup": "node infra/cf-setup.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
+}
