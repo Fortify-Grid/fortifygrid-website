@@ -15,7 +15,7 @@
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/dashboard/api/*"]
+    "run_worker_first": true
   },
   "vars": {
     // Not secrets: Cloudflare puts these in every login token. Filled in by infra/cf-setup.mjs output.

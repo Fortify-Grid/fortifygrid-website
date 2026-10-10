@@ -464,6 +464,11 @@ export class Directory extends WorkerEntrypoint {
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+    // One canonical host: Access protects fortifygrid.com/dashboard, not www.
+    if (url.hostname.startsWith('www.')) {
+      url.hostname = url.hostname.slice(4);
+      return Response.redirect(url.toString(), 301);
+    }
     if (url.pathname.startsWith('/dashboard/api/')) {
       try {
         return await api(req, env, url);
