@@ -7,7 +7,8 @@ which controls who can use every FortifyGrid app.
 
 | Doc | |
 |---|---|
-| [INFRA.md](INFRA.md) | How login, apps, data access and deploys work; setup + new-app checklist |
+| [USER_SETUP.md](USER_SETUP.md) | Your setup steps (human) |
+| [INFRA.md](INFRA.md) | How it works + what an LLM runs |
 
 ```bash
 npm install

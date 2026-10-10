@@ -4,3 +4,8 @@ node_modules/
 .env*
 .DS_Store
 infra/.cf-setup.json
+
+# Local secret notes — never commit
+client_secret_*.json
+do_not_delete.md
+*.secret*

@@ -1,235 +1,113 @@
-# FortifyGrid Infrastructure
+# FortifyGrid Infrastructure (for LLMs)
 
-The single reference for how FortifyGrid sites and apps are built, secured, deployed and connected to data.
-Humans and LLMs read this first. Keep §2 (status) current.
+The human's steps are in **USER_SETUP.md**. This file covers everything an agent does. Keep §1 status current.
 
 **Pattern:** a Cloudflare Worker with static assets sits behind Cloudflare Access, where people sign in with Google
-or a one-time email code. The Worker verifies the Access token, roles live in D1, and the admin page syncs emails
-into Access groups. Pushing to `main` deploys through GitHub Actions. Data comes from AWS RDS Postgres through
-Hyperdrive, with one read-only DB user per app.
+or a one-time email code. The Worker verifies the Access token, roles live in D1, and admin saves sync emails into
+Access groups. Pushing to `main` deploys through GitHub Actions. Data comes from AWS RDS Postgres through Hyperdrive,
+with one read-only DB user per app.
 
-**Legend:** 👤 = human (logins, consoles, tokens) · 🤖 = LLM/agent (code, commands, deploys)
-
----
-
-## 1. Repos & identity
-
-| Repo (GitHub `Fortify-Grid`) | Local folder | Holds | Serves |
-|---|---|---|---|
-| `fortifygrid-website` | `Shared drives/4. Fortify AI LLC/11. AI Code/6. FortifyGrid Website` | Public site `public/`, portal `worker.js`, this file | `fortifygrid.com` |
-| `FGAI-RAG` | `…/11. AI Code/2. FGAI-RAG` | Heatmap viewer `HEATMAP/` + Worker `app/`, tools, docs | `heatmap.fortifygrid.com` |
-| `FGDataETL` | `~/FortifyAI/FGDataETL` | Python ETL into RDS schema `fortify` | ETL server |
-
-- **Which repo for a change:**
-  - Site text, login, users, roles, app registry, this doc → `fortifygrid-website`.
-  - Heatmap UI or API → `FGAI-RAG`.
-  - Data ingest or schema → `FGDataETL`.
-- **Accounts:**
-  - Cloudflare account `5b09f3b0f591d77cd46739113e886479`: owner admin@fortifygrid.com, Super Admin krishnan@fortifygrid.com.
-  - Google Cloud project "FortifyGrid Login" (krishnan@fortifygrid.com).
-  - GitHub `krishnanraghu` (admin on all three repos).
-- **On this Mac:**
-  - `gh` also has `krishnandhruv4-hub` (read-only), which sometimes becomes active. If a push says "denied to krishnandhruv4-hub", run `gh auth switch -u krishnanraghu`.
-  - Wrangler's default login is the Aceing account. For FortifyGrid, run `export XDG_CONFIG_HOME=$HOME/.config/fortifygrid` first.
-- **Legacy:** archive `FG-Data-viewer` and `AI-DATA-View` once the heatmap is live.
-
----
-
-## 2. Setup checklist & status (update the Status column as you go)
-
-### A. Code & repos
-| # | Who | Step | Status |
-|---|---|---|---|
-| A1 | 🤖 | Portal, admin page, heatmap app and CI written and tested locally | ✅ 2026-10-10 |
-| A2 | 🤖 | All website images and fonts copied from Webflow's CDN into `public/assets/`. Added robots.txt, sitemap, 404 and `/privacy` | ✅ |
-| A3 | 🤖 | RDS read-only user `heatmap_ro` created. Its password is only in `FGAI-RAG/app/.dev.vars` | ✅ |
-| A4 | 🤖 | Pushed: website → branch `portal-setup` (not `main`, see C3); FGAI-RAG and FGDataETL → `main` | ✅ |
-
-### B. Accounts & Cloudflare (one time)
-| # | Who | Step | Status |
-|---|---|---|---|
-| B1 | 👤 | Cloudflare: get invited to account `5b09…6479` and select it in the account switcher. Confirm `fortifygrid.com` is listed | ✅ |
-| B2 | 👤 | Zero Trust → team name `fortifyai` → Free plan → team domain `fortifyai.cloudflareaccess.com` | ✅ |
-| B3 | 👤 | Google login, see B3 detail below | ⏳ client pending |
-| B4 | 👤 | Create the 3 Cloudflare API tokens in §7 (account `5b09…6479`, zone `fortifygrid.com`). Note the Account ID | ⏳ |
-| B5 | 🤖 | `cd "6. FortifyGrid Website" && npm install && CF_SETUP_TOKEN=… GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… node infra/cf-setup.mjs portal`. Creates the login methods, the dashboard Access app and group, and D1, and fills `wrangler.jsonc`. 👤 pastes the values into a terminal, never into chat | ⏳ |
-| B6 | 🤖 | `CF_SETUP_TOKEN=… DATABASE_URL="$(grep ^DATABASE_URL '../2. FGAI-RAG/app/.dev.vars' \| cut -d= -f2-)" node infra/cf-setup.mjs hyperdrive heatmap '../2. FGAI-RAG/app/wrangler.jsonc'` | ⏳ |
-| B7 | 🤖 | `XDG_CONFIG_HOME=$HOME/.config/fortifygrid npx wrangler login` (👤 clicks Approve), then `npx wrangler secret put CF_API_TOKEN` with the access-sync token, then commit the filled `wrangler.jsonc` files | ⏳ |
-| B8 | 👤 | GitHub → each of `fortifygrid-website` and `FGAI-RAG` → Settings → Secrets and variables → Actions: `CLOUDFLARE_API_TOKEN` (the deploy token) and `CLOUDFLARE_ACCOUNT_ID` | ⏳ |
-
-**B3 detail: Google login (console.cloud.google.com, project "FortifyGrid Login")**
-1. **Branding:**
-   - App name `FortifyGrid`, support and developer email krishnan@fortifygrid.com.
-   - Home page `https://fortifygrid.com`, privacy policy `https://fortifygrid.com/privacy`.
-   - Authorized domains: `fortifygrid.com` and `cloudflareaccess.com`.
-   - **No logo.** A logo forces a review that can take weeks.
-2. **Audience:** External → **Publish app** → status *In production*. ✅ done.
-   - Leave the yellow "requires verification" banner alone. Verification only changes the name shown on Google's screen. Login only asks for name and email, so there is no warning and no user cap.
-3. **Clients → Create client → Web application:**
-   - **Authorized redirect URIs** (not *JavaScript origins*): `https://fortifyai.cloudflareaccess.com/cdn-cgi/access/callback`
-   - Copy the Client ID and secret.
-   - If you get "Invalid Origin: URIs must not contain a path", the URL went into the JavaScript origins box. Leave that box empty.
-
-### C. Go live (cutover from the old Pages site, about 1 min downtime)
-| # | Who | Step | Status |
-|---|---|---|---|
-| C1 | 👤 | Cloudflare → Workers & Pages → **Pages** project `fortifygrid-website` → Settings → Builds → **Disconnect Git** | ⏳ |
-| C2 | 👤 | Same project → Custom domains → remove `fortifygrid.com` and `www.fortifygrid.com`, then tell 🤖 "detached" right away | ⏳ |
-| C3 | 🤖 | Merge `portal-setup` → `main` and push. Actions deploys the Worker, which claims the domains. **Never merge before C1–C2**: Pages builds `main` from the repo root, would find no `index.html`, and the site would go down | ⏳ |
-| C4 | 🤖 | Run the §6 verify checks | ⏳ |
-| C5 | 👤 | fortifygrid.com/dashboard → sign in → Manage users → **Apps** → Grid Heatmap → **Create Access** → **Users** → add people | ⏳ |
-| C6 | 🤖 | Push FGAI-RAG (or re-run its workflow) so the heatmap deploys, then verify heatmap.fortifygrid.com | ⏳ |
-| C7 | 👤 | Delete the old Pages project. GitHub → fortifygrid-website → Settings → Pages → Source **None** | ⏳ |
-| C8 | 🤖 | Mark everything ✅ here | ⏳ |
-
-### D. Open issues
-- Contact form on the site doesn't send (`public/script.js` TODO). Planned: save to D1, add Admin → Messages, and email info@.
-- **Rotate the secrets in git history:** the RDS `postgres` password (FGAI-RAG history) and the PJM/ERCOT/SMTP credentials (FGDataETL history). Then update `.env` on the ETL server.
-- FGDataETL no longer tracks `.env`, so on any other clone `git pull` deletes it. Back it up before pulling: `cp .env /tmp/etl.env && git pull && cp /tmp/etl.env .env`.
-- AWS CLI on the Mac uses root keys. Replace them with an IAM user.
-- 2026 data uses short ISO names (`MISO`, `NEISO`, `NYISO`). Fix in FGDataETL.
-- Never yet run against real Cloudflare: `cf-setup.mjs`, "Create Access", group sync, the `Directory` RPC. Fix them on the first run in B5–C6.
-
----
-
-## 3. Agent workflow (every change after setup)
-
-1. Pick the repo (§1). Edit. Never put secrets in tracked files; never send SQL from the browser.
-2. Check: `npm run check` (website) or `cd app && npm run check` (heatmap). For UI changes also run `npm run dev` and look at the page.
-3. `gh auth status` must show **krishnanraghu**. If not, `gh auth switch -u krishnanraghu`.
-4. Commit when the human asks, then `git push origin main`. **The push is the deploy.**
-5. Confirm with `gh run list -L 1`, then run the §6 checks. If it broke: `npx wrangler rollback`, then fix forward.
-6. Update §2 and this file in the same commit when state or the pattern changes.
-
----
-
-## 4. How it works
-
-```
-Browser → https://<app>.fortifygrid.com  or  fortifygrid.com/dashboard
-  ▼
-Cloudflare Access ─ not signed in → Google | email one-time code
-  │ only if email ∈ that app's Access group ("FortifyGrid users" for the dashboard, "<Name> users" per app)
-  │ adds header Cf-Access-Jwt-Assertion (RS256, iss=https://fortifyai.cloudflareaccess.com, aud=<app AUD>)
-  ▼
-App Worker (run_worker_first: every path, static files too)
-  │ PORTAL.config(appId) → {team_domain, aud}      cached 5 min
-  │ verify JWT signature, iss, exp, aud → email
-  │ PORTAL.access(email, appId) → role | null      cached 60 s → 401/403 page if none
-  │ serve ./dist, or /api/* → fixed SQL → env.HYPERDRIVE → RDS (read-only user)
-  ▼
-Portal Worker fortifygrid-website (entrypoint Directory, service binding only)
-  └ D1 fortifygrid-portal: apps · users · app_access · settings · audit
-```
-Admin → save user → D1 → `syncAccessGroups()` rewrites the email rules in every Access group. The dashboard group
-gets all active users; each app's group gets the users with a role in it. `ADMIN_EMAILS` are always included.
-
-| Component | Name / value |
+## 1. Status (update when it changes)
+| Item | State |
 |---|---|
-| Zone | `fortifygrid.com`: Cloudflare DNS, registrar Squarespace, mail on Google |
-| Zero Trust team | `fortifyai.cloudflareaccess.com`. Login methods: Google + One-time PIN |
-| Access apps | `fortifygrid.com/dashboard` (covers sub-paths) and `<app>.fortifygrid.com`. Self-hosted, all login methods, 24h session, HttpOnly cookie, SameSite Lax, app launcher hidden |
-| Access policy | One per app: **Allow**, include Access group "<Name> users". Group members are email rules written by the portal; other rules you add by hand are kept |
-| Portal Worker | `fortifygrid-website`: `worker.js`, `public/`, `schema.sql` (idempotent, runs every deploy) |
-| App Worker | `fortifygrid-heatmap`: `app/worker/index.js`, `app/dist` built from `HEATMAP/`, binds `PORTAL` |
-| Hyperdrive | `heatmap-db` → `fortifygrid.c0zem4me47r0.us-east-1.rds.amazonaws.com:5432/fortifygrid` |
-| DNS | Nothing to set by hand. Worker `custom_domain` routes create the records and certificates |
-| Sign out | `/cdn-cgi/access/logout` |
+| Code: portal, admin, heatmap, CI; site assets self-hosted | ✅ |
+| Cloudflare: team `fortifyai`, Google + email-code logins, dashboard Access app + group, D1, Hyperdrive `heatmap-db` | ✅ created by `infra/cf-setup.mjs` |
+| `wrangler.jsonc` (portal + heatmap) filled | ✅ committed |
+| Token `fortifygrid-admin`: still needs Pages Edit + Workers Routes Edit | ⏳ human (USER_SETUP §4) |
+| Cutover: detach the Pages domains → deploy portal → `CF_API_TOKEN` secret → deploy heatmap → GitHub secrets → merge `portal-setup` → `main` | ⏳ agent (§4) |
+| Heatmap Access app (admin → Apps → Create Access) | ⏳ after deploy |
+| Open issues | Contact form doesn't send (`public/script.js` TODO). Old secrets in git history (owner chose not to rotate). AWS CLI uses root keys. 2026 short ISO names in ETL |
 
-**D1 tables:**
-- `apps` (id, name, url, roles JSON lowest→highest, access_group_id, access_aud, enabled)
-- `users` (email, name, is_admin, active, last_seen_at)
-- `app_access` (email, app_id, role)
-- `settings` (key, value; e.g. `dashboard_notice`)
-- `audit`
-
-**Portal API** (needs an Access login; `admin/*` needs admin; writes need a same-origin JSON request):
-`GET me`, `GET admin/overview`, `POST admin/users`, `DELETE admin/users/:email`, `POST admin/users/:email/invite`,
-`POST admin/apps` (`provision:true` creates the Access app and group), `POST/DELETE admin/settings[/:key]`, `POST admin/sync`, `GET admin/audit`.
-
----
-
-## 5. Security rules (keep)
-
-1. Every host is behind an Access app **and** the Worker verifies the JWT itself.
-2. `workers_dev: false` and `preview_urls: false`, so no address skips Access.
-3. `ADMIN_EMAILS` in the portal `wrangler.jsonc` are always admins, so nobody can be locked out.
-4. No SQL from the browser: fixed queries, bound parameters, whitelisted identifiers.
-5. One RDS user per app: `SELECT` only, read-only transactions, 30 s statement timeout, 20 connections max.
-6. Secrets only in `.dev.vars`, `.env*`, `infra/.cf-setup.json` (all gitignored), Hyperdrive, `wrangler secret`, or GitHub secrets.
-7. Keep the `Directory.config(appId)` and `Directory.access(email, appId)` signatures. Change existing D1 tables only through a migration.
-
----
-
-## 6. Data access, secrets, verify
-
-| Who reads RDS | How | User |
+## 2. Repos, accounts, IDs
+| Repo `Fortify-Grid/…` | Local folder | Serves |
 |---|---|---|
-| App Worker (prod) | `postgres(env.HYPERDRIVE.connectionString)` | `<app>_ro` (stored in Hyperdrive) |
-| App Worker (local) | `cd app && npm run dev` reads `DATABASE_URL` from `app/.dev.vars` | `<app>_ro` |
-| psql / tools | `set -a; source .env.local; set +a` in the FGAI-RAG root | `postgres` |
-| ETL | FGDataETL `.env` → `DB_CONNECTION_STRING` | `postgres` (later: a separate `etl_rw` user) |
+| `fortifygrid-website` | `Shared drives/4. Fortify AI LLC/11. AI Code/6. FortifyGrid Website` | fortifygrid.com: `public/` site, `worker.js` portal, `/dashboard`, `/dashboard/admin` |
+| `FGAI-RAG` | `…/11. AI Code/2. FGAI-RAG` | heatmap.fortifygrid.com: `app/` Worker + `HEATMAP/` UI |
+| `FGDataETL` | `~/FortifyAI/FGDataETL` | ETL into RDS `fortify` (not Cloudflare) |
 
-**Verify a deploy:**
+- **Which repo:**
+  - Site, login, users, apps → website.
+  - Heatmap → FGAI-RAG.
+  - Data → FGDataETL.
+- **Accounts:**
+  - Cloudflare account `5b09f3b0f591d77cd46739113e886479` (owner admin@fortifygrid.com). Zone `fortifygrid.com`.
+  - Team `fortifyai.cloudflareaccess.com`.
+  - D1 `fortifygrid-portal`. Hyperdrive `heatmap-db` → RDS `fortifygrid.c0zem4me47r0.us-east-1.rds.amazonaws.com/fortifygrid` as `heatmap_ro`.
+- **Secrets:**
+  - `~/.config/fortifygrid/secrets.env` (`CF_SETUP_TOKEN`, `CF_ACCOUNT_ID`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`). Load it with `set -a; . ~/.config/fortifygrid/secrets.env >/dev/null 2>&1; set +a`. **Never echo values. Pipe output through `sed -E 's/(cfut_|GOCSPX-)[A-Za-z0-9_-]+/\1***/g'`.**
+  - DB URLs live in `FGAI-RAG/app/.dev.vars` and `FGAI-RAG/.env.local` (both gitignored).
+- **This Mac:**
+  - `gh` must be `krishnanraghu`; run `gh auth switch -u krishnanraghu` if a push is denied.
+  - For wrangler, pass the token through `CLOUDFLARE_API_TOKEN` (the default OAuth login is a different account).
+
+## 3. Agent workflow (every change)
+1. Pick the repo. Edit. No secrets in tracked files; no SQL from the browser.
+2. Run `npm run check` (website) or `cd app && npm run check` (heatmap). For UI changes, also run `npm run dev` and look at the page.
+3. Commit, then `git push origin main`. **The push is the deploy.** Confirm with `gh run list -L 1` and the §6 checks.
+4. If it broke: `npx wrangler rollback`. Update §1 in the same commit when state changes.
+
+## 4. First deploy / cutover (agent, once the token has every permission in USER_SETUP §4)
+```bash
+set -a; . ~/.config/fortifygrid/secrets.env >/dev/null 2>&1; set +a
+export CLOUDFLARE_API_TOKEN=$CF_SETUP_TOKEN CLOUDFLARE_ACCOUNT_ID=$CF_ACCOUNT_ID
+# 1. Remove fortifygrid.com + www from the Pages project "fortifygrid-website", and their CNAMEs to *.pages.dev (API)
+# 2. Website repo, branch portal-setup:
+npm install && npm run db:schema && npx wrangler deploy
+echo "$CF_SETUP_TOKEN" | npx wrangler secret put CF_API_TOKEN
+# 3. FGAI-RAG: cd app && npm install && npm run deploy
+# 4. GitHub secrets (both repos): gh secret set CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID -R Fortify-Grid/<repo>
+# 5. Merge portal-setup → main in the website repo; push FGAI-RAG main
+# 6. Turn off GitHub Pages: gh api -X DELETE repos/Fortify-Grid/fortifygrid-website/pages
+```
+**Never merge `portal-setup` → `main` before step 1.** The Pages project builds `main` from the repo root, and would take the site down.
+
+## 5. How it works
+```
+Browser → fortifygrid.com/dashboard  or  <app>.fortifygrid.com
+ → Cloudflare Access: Google or email code; allowed only if the email is in that app's Access group
+ → Worker (run_worker_first): PORTAL.config(appId) → {team_domain, aud} → verify JWT (iss, aud, exp, sig)
+   → PORTAL.access(email, appId) → role, else 401/403 → serve ./dist, or /api/* → Hyperdrive → RDS (read-only)
+Portal Worker fortifygrid-website (entrypoint Directory, service binding only) → D1: apps, users, app_access, settings, audit
+Admin saves a user → syncAccessGroups() rewrites the email rules in the Access groups ("FortifyGrid users" for the
+dashboard, "<Name> users" per app; ADMIN_EMAILS are always included)
+```
+- **Access apps:** self-hosted, all login methods, 24h sessions, HttpOnly cookie, SameSite Lax, policy Allow → group.
+- **DNS:** nothing by hand. Worker `custom_domain` routes create the records and certificates.
+- **Admin page:** tabs Users / Apps (Create Access provisions the Access app + group) / Settings (`dashboard_notice`) / Activity.
+- **Portal API (`/dashboard/api/`):**
+  - `me`, `admin/overview`, `admin/users`, `admin/apps`, `admin/settings`, `admin/sync`, `admin/audit`.
+  - Writes require a same-origin JSON request.
+
+## 6. Verify
 ```bash
 curl -sI https://fortifygrid.com | head -1                       # 200
 curl -sI https://fortifygrid.com/dashboard/ | grep -i location   # → fortifyai.cloudflareaccess.com
 curl -sI https://heatmap.fortifygrid.com | grep -i location      # → Access login
 ```
-Then in a browser: sign in → tiles → open the app. An email that isn't on the list gets "not authorized".
-Logs: `npx wrangler tail fortifygrid-website` (or `fortifygrid-heatmap`).
 
----
-
-## 7. Tokens & secrets
-
-| Name | Where it lives | Permissions (account `5b09…6479`, zone `fortifygrid.com`) |
-|---|---|---|
-| `fortifygrid-setup` | Your Mac only (for `cf-setup.mjs`) | Access: Apps and Policies Edit · Access: Organizations, Identity Providers, and Groups Edit · D1 Edit · Hyperdrive Edit · Cloudflare Pages Edit · Zone Read · DNS Edit |
-| `fortifygrid-deploy` | GitHub secret `CLOUDFLARE_API_TOKEN` in both repos | Workers Scripts Edit · D1 Edit · Hyperdrive Edit · Workers Routes Edit · Zone Read · DNS Edit |
-| `fortifygrid-access-sync` | Portal `wrangler secret put CF_API_TOKEN` | Access: Apps and Policies Edit · Access: Organizations, Identity Providers, and Groups Edit |
-| Account ID | GitHub secret `CLOUDFLARE_ACCOUNT_ID` | — |
-| Google Client ID / secret | Zero Trust → Authentication → Google (set by B5) | — |
-| `EMAIL_API_KEY` (optional) | Portal `wrangler secret` + `EMAIL_FROM` var | Resend invites; without it the admin page opens your mail app |
-| `<app>_ro` password | Hyperdrive + `app/.dev.vars` | — |
-
----
-
-## 8. Add a new app
-
-1. 🤖 Copy FGAI-RAG `app/` into the app's repo. Set `APP_ID`, the Worker `name`, the route host, `scripts/build.mjs` and the queries.
-2. 🤖 Create the DB user, as `postgres`:
+## 7. New app
+1. Copy FGAI-RAG `app/` into the app's repo. Set `APP_ID`, the Worker name, the route host, the build and the queries.
+2. DB user, as `postgres`:
    ```sql
-   CREATE ROLE <app>_ro LOGIN PASSWORD '<openssl rand -hex 24>' CONNECTION LIMIT 20;
-   ALTER ROLE <app>_ro SET statement_timeout = '30s';
-   ALTER ROLE <app>_ro SET default_transaction_read_only = on;
+   CREATE ROLE <app>_ro LOGIN PASSWORD '<random>' CONNECTION LIMIT 20;
+   ALTER ROLE <app>_ro SET statement_timeout='30s';
+   ALTER ROLE <app>_ro SET default_transaction_read_only=on;
    GRANT CONNECT ON DATABASE fortifygrid TO <app>_ro;
    GRANT USAGE ON SCHEMA fortify TO <app>_ro;
    GRANT SELECT ON ALL TABLES IN SCHEMA fortify TO <app>_ro;
-   ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA fortify GRANT SELECT ON TABLES TO <app>_ro;
    ```
-   Put `DATABASE_URL=postgresql://<app>_ro:…@…/fortifygrid?sslmode=require` in `app/.dev.vars`.
-3. 🤖 Create Hyperdrive: `node infra/cf-setup.mjs hyperdrive <app> <path>/app/wrangler.jsonc`, with `CF_SETUP_TOKEN` and `DATABASE_URL` set.
-4. 👤 or 🤖 Admin → Apps: enter id, name, URL and roles, tick **Create Cloudflare Access**, Save.
-5. 🤖 Copy `deploy-heatmap.yml` and fix its paths. 👤 adds the 2 GitHub secrets.
-6. 🤖 Push. 👤 gives people roles in admin → Users.
+   Then add the URL to `app/.dev.vars`.
+3. `DATABASE_URL=… node infra/cf-setup.mjs hyperdrive <app> <path>/app/wrangler.jsonc` (with the secrets loaded).
+4. Admin → Apps: id, name, URL, roles, **Create Cloudflare Access**.
+5. Copy `deploy-heatmap.yml`, set the GitHub secrets, push. The human adds users.
 
----
-
-## 9. Everyday
-
-| Task | How |
-|---|---|
-| Give or remove access | Admin → Users (Access updates immediately) |
-| Dashboard banner / site config | Admin → Settings (`dashboard_notice`) |
-| Disable an app | Admin → Apps → untick **On** |
-| Change code | §3: edit → check → push `main` → live in about 1 min |
-| Run locally | Website: `cp .dev.vars.example .dev.vars && npm run db:schema:local && npm run dev`. Heatmap: `cd app && npm run dev` → :8787 |
-| Rotate a DB password | `ALTER ROLE <app>_ro PASSWORD '…'`, then repeat §8 step 3 |
-
-## 10. Gotchas
-- Deploy the portal before any app. Apps bind to `fortifygrid-website#Directory`.
-- An app returns 401 for everyone until admin → Apps shows its Access as **ready**.
-- A domain still attached to Pages makes `wrangler deploy` fail. Detach it first (C1–C2).
-- Access groups can't be empty, which is why `ADMIN_EMAILS` are always in them.
+## 8. Rules & gotchas
+- Every host is behind Access **and** the Worker verifies the JWT itself.
+- `workers_dev` and `preview_urls` are off.
+- `ADMIN_EMAILS` = krishnan@fortifygrid.com. They are always admins, so nobody can be locked out.
+- No SQL from the browser: fixed, bound queries. One read-only DB user per app.
+- `schema.sql` must stay idempotent. Keep the `Directory.config` and `Directory.access` signatures.
+- Deploy the portal before any app.
+- An app returns 401 until admin → Apps shows its Access as ready.
 - CI refuses to deploy while any `wrangler.jsonc` still contains `REPLACE_`.
+- FGDataETL no longer tracks `.env`, so `git pull` on other clones deletes it. Back it up first.
