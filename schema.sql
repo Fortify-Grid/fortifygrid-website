@@ -83,3 +83,18 @@ INSERT INTO role_tabs (app_id, role, tab)
 INSERT INTO role_tabs (app_id, role, tab)
   SELECT 'heatmap', 'admin', tab FROM app_tabs WHERE app_id = 'heatmap'
   AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'heatmap' AND role = 'admin');
+
+-- Data Query app (FGAI-RAG/query). Tabs: download = CSV export, save = save/delete queries, configure = choose datasets.
+INSERT OR IGNORE INTO apps (id, name, description, url, roles, sort, created_at, updated_at) VALUES
+  ('query', 'Data Query', 'Filter any exposed table or view with cascading lists, view or download results, save queries.',
+   'https://query.fortifygrid.com/', '["viewer","admin"]', 2, datetime('now'), datetime('now'));
+INSERT OR IGNORE INTO app_tabs (app_id, tab, label, sort) VALUES
+  ('query', 'download', 'Download CSV', 1),
+  ('query', 'save', 'Save queries', 2),
+  ('query', 'configure', 'Configure datasets', 3);
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'query', 'viewer', tab FROM app_tabs WHERE app_id = 'query' AND tab IN ('download', 'save')
+  AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'query');
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'query', 'admin', tab FROM app_tabs WHERE app_id = 'query'
+  AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'query' AND role = 'admin');
