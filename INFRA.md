@@ -102,6 +102,7 @@ curl -sI https://heatmap.fortifygrid.com | grep -i location      # → Access lo
 5. Copy `deploy-heatmap.yml`, set the GitHub secrets, push. The human adds users.
 
 ## 8. Rules & gotchas
+- **Data lives in AWS RDS; D1 is only for app metadata** (users, roles, settings, configs, saved query definitions). Never copy grid data or query results into D1, KV or R2. Apps read RDS live through Hyperdrive.
 - Every host is behind Access **and** the Worker verifies the JWT itself.
 - `workers_dev` and `preview_urls` are off.
 - `ADMIN_EMAILS` = krishnan@fortifygrid.com. They are always admins, so nobody can be locked out.
