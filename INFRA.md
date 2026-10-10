@@ -96,7 +96,7 @@ curl -sI https://heatmap.fortifygrid.com | grep -i location      # → Access lo
    GRANT USAGE ON SCHEMA fortify TO <app>_ro;
    GRANT SELECT ON ALL TABLES IN SCHEMA fortify TO <app>_ro;
    ```
-   Then add the URL to `app/.dev.vars`.
+   Then add the URL to `apps/<app>/.dev.vars`.
 3. `DATABASE_URL=… node infra/cf-setup.mjs hyperdrive <app> <path>/app/wrangler.jsonc` (with the secrets loaded).
 4. Admin → Apps: id, name, URL, roles, **Create Cloudflare Access**.
 5. Copy `.github/workflows/deploy-query.yml`, set the GitHub secrets, push. The human adds users.
