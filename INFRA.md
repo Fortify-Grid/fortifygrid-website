@@ -14,6 +14,7 @@ with one read-only DB user per app.
 | Login: Access team `fortifyai`, Google + email code; dashboard and heatmap Access apps + groups | ✅ |
 | Auto-deploy: push `main` → Actions (secrets set in both repos, token `fortifygrid-setup`) | ✅ |
 | Roles × tabs per app (admin → Apps → Tabs); heatmap tabs: filters, database, csv_upload, gis_layers, generators, results, search | ✅ |
+| Data Query app `query.fortifygrid.com` (FGAI-RAG `query/`): any exposed table/view/matview in all schemas via `query_ro` + Hyperdrive `query-db`; datasets + saved queries in D1 `fortifygrid-query`; tabs download/save/configure | ✅ 2026-10-10 |
 | Old heatmap A record (18.232.37.189, dead EC2) replaced by the Worker | ✅ |
 | Open | Contact form doesn't send. Secrets in git history not rotated (owner's choice). AWS CLI root keys. 2026 short ISO names. Old Pages project `fortifygrid-website` can be deleted |
 
@@ -21,7 +22,7 @@ with one read-only DB user per app.
 | Repo `Fortify-Grid/…` | Local folder | Serves |
 |---|---|---|
 | `fortifygrid-website` | `Shared drives/4. Fortify AI LLC/11. AI Code/6. FortifyGrid Website` | fortifygrid.com: `public/` site, `worker.js` portal, `/dashboard`, `/dashboard/admin` |
-| `FGAI-RAG` | `…/11. AI Code/2. FGAI-RAG` | heatmap.fortifygrid.com: `app/` Worker + `HEATMAP/` UI |
+| `FGAI-RAG` | `…/11. AI Code/2. FGAI-RAG` | heatmap.fortifygrid.com (`app/` + `HEATMAP/`), query.fortifygrid.com (`query/`). Shared Access/role code: `shared/app-worker.js` |
 | `FGDataETL` | `~/FortifyAI/FGDataETL` | ETL into RDS `fortify` (not Cloudflare) |
 
 - **Which repo:**
@@ -85,7 +86,7 @@ curl -sI https://heatmap.fortifygrid.com | grep -i location      # → Access lo
 ```
 
 ## 7. New app
-1. Copy FGAI-RAG `app/` into the app's repo. Set `APP_ID`, the Worker name, the route host, the build and the queries.
+1. Copy FGAI-RAG `query/` (smallest example). The Worker is `export default appWorker({ appId, devTabs, api })` from `shared/app-worker.js`. Set the Worker name, route host and API. Register the app, its tabs and role defaults in the portal `schema.sql` (see the `query` rows).
 2. DB user, as `postgres`:
    ```sql
    CREATE ROLE <app>_ro LOGIN PASSWORD '<random>' CONNECTION LIMIT 20;
