@@ -49,7 +49,7 @@ Hyperdrive, with one read-only DB user per app.
 | # | Who | Step | Status |
 |---|---|---|---|
 | B1 | 👤 | Cloudflare: get invited to account `5b09…6479` and select it in the account switcher. Confirm `fortifygrid.com` is listed | ✅ |
-| B2 | 👤 | Zero Trust → team name `fortifygrid` → Free plan → team domain `fortifygrid.cloudflareaccess.com` | ✅ |
+| B2 | 👤 | Zero Trust → team name `fortifyai` → Free plan → team domain `fortifyai.cloudflareaccess.com` | ✅ |
 | B3 | 👤 | Google login, see B3 detail below | ⏳ client pending |
 | B4 | 👤 | Create the 3 Cloudflare API tokens in §7 (account `5b09…6479`, zone `fortifygrid.com`). Note the Account ID | ⏳ |
 | B5 | 🤖 | `cd "6. FortifyGrid Website" && npm install && CF_SETUP_TOKEN=… GOOGLE_CLIENT_ID=… GOOGLE_CLIENT_SECRET=… node infra/cf-setup.mjs portal`. Creates the login methods, the dashboard Access app and group, and D1, and fills `wrangler.jsonc`. 👤 pastes the values into a terminal, never into chat | ⏳ |
@@ -66,7 +66,7 @@ Hyperdrive, with one read-only DB user per app.
 2. **Audience:** External → **Publish app** → status *In production*. ✅ done.
    - Leave the yellow "requires verification" banner alone. Verification only changes the name shown on Google's screen. Login only asks for name and email, so there is no warning and no user cap.
 3. **Clients → Create client → Web application:**
-   - **Authorized redirect URIs** (not *JavaScript origins*): `https://fortifygrid.cloudflareaccess.com/cdn-cgi/access/callback`
+   - **Authorized redirect URIs** (not *JavaScript origins*): `https://fortifyai.cloudflareaccess.com/cdn-cgi/access/callback`
    - Copy the Client ID and secret.
    - If you get "Invalid Origin: URIs must not contain a path", the URL went into the JavaScript origins box. Leave that box empty.
 
@@ -110,7 +110,7 @@ Browser → https://<app>.fortifygrid.com  or  fortifygrid.com/dashboard
   ▼
 Cloudflare Access ─ not signed in → Google | email one-time code
   │ only if email ∈ that app's Access group ("FortifyGrid users" for the dashboard, "<Name> users" per app)
-  │ adds header Cf-Access-Jwt-Assertion (RS256, iss=https://fortifygrid.cloudflareaccess.com, aud=<app AUD>)
+  │ adds header Cf-Access-Jwt-Assertion (RS256, iss=https://fortifyai.cloudflareaccess.com, aud=<app AUD>)
   ▼
 App Worker (run_worker_first: every path, static files too)
   │ PORTAL.config(appId) → {team_domain, aud}      cached 5 min
@@ -127,7 +127,7 @@ gets all active users; each app's group gets the users with a role in it. `ADMIN
 | Component | Name / value |
 |---|---|
 | Zone | `fortifygrid.com`: Cloudflare DNS, registrar Squarespace, mail on Google |
-| Zero Trust team | `fortifygrid.cloudflareaccess.com`. Login methods: Google + One-time PIN |
+| Zero Trust team | `fortifyai.cloudflareaccess.com`. Login methods: Google + One-time PIN |
 | Access apps | `fortifygrid.com/dashboard` (covers sub-paths) and `<app>.fortifygrid.com`. Self-hosted, all login methods, 24h session, HttpOnly cookie, SameSite Lax, app launcher hidden |
 | Access policy | One per app: **Allow**, include Access group "<Name> users". Group members are email rules written by the portal; other rules you add by hand are kept |
 | Portal Worker | `fortifygrid-website`: `worker.js`, `public/`, `schema.sql` (idempotent, runs every deploy) |
@@ -173,7 +173,7 @@ gets all active users; each app's group gets the users with a role in it. `ADMIN
 **Verify a deploy:**
 ```bash
 curl -sI https://fortifygrid.com | head -1                       # 200
-curl -sI https://fortifygrid.com/dashboard/ | grep -i location   # → fortifygrid.cloudflareaccess.com
+curl -sI https://fortifygrid.com/dashboard/ | grep -i location   # → fortifyai.cloudflareaccess.com
 curl -sI https://heatmap.fortifygrid.com | grep -i location      # → Access login
 ```
 Then in a browser: sign in → tiles → open the app. An email that isn't on the list gets "not authorized".

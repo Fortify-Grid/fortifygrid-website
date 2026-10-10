@@ -19,19 +19,19 @@
   },
   "vars": {
     // Not secrets: Cloudflare puts these in every login token. Filled in by infra/cf-setup.mjs output.
-    "CF_ACCESS_TEAM_DOMAIN": "REPLACE_TEAM.cloudflareaccess.com",
-    "CF_ACCESS_AUD": "REPLACE_DASHBOARD_AUD",
+    "CF_ACCESS_TEAM_DOMAIN": "fortifyai.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "6631bbc06cd25cc8b4b203b91be81f91481919a8d92705ead6940b29048b70bb",
     // Always full admins, even before they are in the database. Comma-separated.
     "ADMIN_EMAILS": "krishnan@fortifygrid.com",
-    "CF_ACCOUNT_ID": "REPLACE_ACCOUNT_ID",
+    "CF_ACCOUNT_ID": "5b09f3b0f591d77cd46739113e886479",
     // Access group for /dashboard, kept in sync with the user list (every active user). App groups live in D1 apps.
-    "PORTAL_GROUP_ID": "REPLACE_PORTAL_GROUP_ID",
+    "PORTAL_GROUP_ID": "6b819b77-5401-469c-b0b4-62139e123936",
     "EMAIL_FROM": "",
     "EMAIL_REPLY_TO": "krishnan@fortifygrid.com"
     // Secrets (npx wrangler secret put …): CF_API_TOKEN (Access: Groups + Apps and Policies edit), EMAIL_API_KEY (optional).
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "fortifygrid-portal", "database_id": "REPLACE_D1_ID" }
+    { "binding": "DB", "database_name": "fortifygrid-portal", "database_id": "e31551d1-1209-4368-ab91-047be118bc45" }
   ],
   "observability": { "enabled": true }
 }
