@@ -185,8 +185,8 @@ Logs: `npx wrangler tail fortifygrid-website` (or `fortifygrid-heatmap`).
 
 | Name | Where it lives | Permissions (account `5b09…6479`, zone `fortifygrid.com`) |
 |---|---|---|
-| `fortifygrid-setup` | Your Mac only (for `cf-setup.mjs`) | Access: Apps and Policies Edit · Access: Organizations, Identity Providers, and Groups Edit · D1 Edit · Hyperdrive Edit · Zone Read |
-| `fortifygrid-deploy` | GitHub secret `CLOUDFLARE_API_TOKEN` in both repos | Workers Scripts Edit · D1 Edit · Hyperdrive Edit · Workers Routes Edit · Zone Read |
+| `fortifygrid-setup` | Your Mac only (for `cf-setup.mjs`) | Access: Apps and Policies Edit · Access: Organizations, Identity Providers, and Groups Edit · D1 Edit · Hyperdrive Edit · Cloudflare Pages Edit · Zone Read · DNS Edit |
+| `fortifygrid-deploy` | GitHub secret `CLOUDFLARE_API_TOKEN` in both repos | Workers Scripts Edit · D1 Edit · Hyperdrive Edit · Workers Routes Edit · Zone Read · DNS Edit |
 | `fortifygrid-access-sync` | Portal `wrangler secret put CF_API_TOKEN` | Access: Apps and Policies Edit · Access: Organizations, Identity Providers, and Groups Edit |
 | Account ID | GitHub secret `CLOUDFLARE_ACCOUNT_ID` | — |
 | Google Client ID / secret | Zero Trust → Authentication → Google (set by B5) | — |
