@@ -53,3 +53,33 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at TEXT NOT NULL,
   updated_by TEXT NOT NULL
 );
+
+-- Tabs each app has (its UI marks them data-tab="<tab>") and which role may see which (admin → Apps → Tabs).
+CREATE TABLE IF NOT EXISTS app_tabs (
+  app_id TEXT NOT NULL,
+  tab    TEXT NOT NULL,
+  label  TEXT NOT NULL,
+  sort   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (app_id, tab)
+);
+CREATE TABLE IF NOT EXISTS role_tabs (
+  app_id TEXT NOT NULL,
+  role   TEXT NOT NULL,
+  tab    TEXT NOT NULL,
+  PRIMARY KEY (app_id, role, tab)
+);
+INSERT OR IGNORE INTO app_tabs (app_id, tab, label, sort) VALUES
+  ('heatmap', 'filters', 'Filters (left pane)', 1),
+  ('heatmap', 'database', 'Load from Database', 2),
+  ('heatmap', 'csv_upload', 'Load CSV', 3),
+  ('heatmap', 'gis_layers', 'GIS layers', 4),
+  ('heatmap', 'generators', 'Generators', 5),
+  ('heatmap', 'results', 'Results table', 6),
+  ('heatmap', 'search', 'Address search', 7);
+-- Defaults only on first run, so admin changes are never overwritten by a deploy.
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'heatmap', 'viewer', tab FROM app_tabs WHERE app_id = 'heatmap' AND tab IN ('filters', 'gis_layers', 'generators', 'results', 'search')
+  AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'heatmap');
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'heatmap', 'admin', tab FROM app_tabs WHERE app_id = 'heatmap'
+  AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'heatmap' AND role = 'admin');

@@ -57,6 +57,12 @@
         <thead><tr><th>App</th><th>URL</th><th>Roles</th><th>Cloudflare Access</th><th>On</th><th></th></tr></thead>
         <tbody id="apps"></tbody>
       </table></div>
+      <div id="tabs-editor" hidden>
+        <h3 id="tabs-title"></h3>
+        <p class="muted">Tick which tabs each role can see. Admins listed in ADMIN_EMAILS always see everything.</p>
+        <div class="table-wrap"><table><thead id="tabs-head"></thead><tbody id="tabs-body"></tbody></table></div>
+        <p class="row-actions" style="margin-top:12px"><button id="tabs-save">Save tabs</button><button class="ghost" id="tabs-close">Close</button></p>
+      </div>
     </section>
 
     <section data-panel="settings" hidden>
@@ -134,7 +140,7 @@
           <td>${esc(a.roles.join(', '))}</td>
           <td class="muted">${a.access_aud ? `ready<br><small>group ${esc(a.access_group_id.slice(0, 8))}…</small>` : 'not set up'}</td>
           <td><input type="checkbox" data-act="toggle"${a.enabled ? ' checked' : ''}></td>
-          <td class="row-actions"><button class="ghost" data-act="edit">Edit</button>${a.access_aud ? '' : '<button data-act="provision">Create Access</button>'}</td>
+          <td class="row-actions"><button class="ghost" data-act="tabs">Tabs</button><button class="ghost" data-act="edit">Edit</button>${a.access_aud ? '' : '<button data-act="provision">Create Access</button>'}</td>
         </tr>`).join('') || '<tr><td>No apps yet.</td></tr>';
 
       $('settings').innerHTML = state.settings.map((s) => `
@@ -216,6 +222,7 @@
       const act = e.target.dataset.act;
       if (!act || act === 'toggle') return;
       const a = state.apps.find((x) => x.id === e.target.closest('tr').dataset.id);
+      if (act === 'tabs') { openTabs(a); return; }
       if (act === 'edit') {
         const f = $('add-app');
         f.id.value = a.id; f.title.value = a.name; f.url.value = a.url; f.roles.value = a.roles.join(','); f.description.value = a.description;
@@ -231,6 +238,30 @@
       const a = state.apps.find((x) => x.id === e.target.closest('tr').dataset.id);
       report(await api('admin/apps', { method: 'POST', body: appBody(a, { enabled: e.target.checked }) }), `${a.name} ${e.target.checked ? 'enabled' : 'disabled'}.`);
       await load();
+    }));
+
+    /* tabs per role */
+    let tabsApp = null;
+    function openTabs(a) {
+      tabsApp = a;
+      const defs = state.tabs.tabs.filter((t) => t.app_id === a.id);
+      const has = (role, tab) => state.tabs.grants.some((g) => g.app_id === a.id && g.role === role && g.tab === tab);
+      $('tabs-title').textContent = `${a.name}: tabs by role`;
+      $('tabs-head').innerHTML = `<tr><th>Tab</th>${a.roles.map((r) => `<th>${esc(r)}</th>`).join('')}</tr>`;
+      $('tabs-body').innerHTML = defs.length ? defs.map((t) => `<tr><td>${esc(t.label)} <span class="muted">${esc(t.tab)}</span></td>${a.roles
+        .map((r) => `<td><input type="checkbox" data-role="${esc(r)}" data-tab="${esc(t.tab)}"${has(r, t.tab) ? ' checked' : ''}></td>`).join('')}</tr>`).join('')
+        : `<tr><td class="muted">This app has no tabs defined yet.</td></tr>`;
+      $('tabs-editor').hidden = false;
+      $('tabs-editor').scrollIntoView({ behavior: 'smooth' });
+    }
+    $('tabs-close').addEventListener('click', () => { $('tabs-editor').hidden = true; });
+    $('tabs-save').addEventListener('click', run(async () => {
+      const role_tabs = Object.fromEntries(tabsApp.roles.map((r) => [r, []]));
+      $('tabs-body').querySelectorAll('input:checked').forEach((c) => role_tabs[c.dataset.role].push(c.dataset.tab));
+      await api(`admin/apps/${encodeURIComponent(tabsApp.id)}/tabs`, { method: 'POST', body: { role_tabs } });
+      showMsg(msg, `Saved tabs for ${tabsApp.name}. Users see the change within a minute.`, 'ok');
+      await load();
+      openTabs(state.apps.find((x) => x.id === tabsApp.id));
     }));
 
     /* settings */

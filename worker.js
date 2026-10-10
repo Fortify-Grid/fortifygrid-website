@@ -306,6 +306,38 @@ async function saveApp(env, actor, body) {
   return { ok: true, id, note, sync, aud };
 }
 
+/* ---------- Admin: tabs per role ---------- */
+
+async function listTabs(env) {
+  const { results: tabs } = await env.DB.prepare('SELECT app_id, tab, label, sort FROM app_tabs ORDER BY app_id, sort, tab').all();
+  const { results: grants } = await env.DB.prepare('SELECT app_id, role, tab FROM role_tabs').all();
+  return { tabs, grants };
+}
+
+// body: { tabs?: [{tab, label}], role_tabs: { <role>: [tab, ...] } }. Replaces the app's tab grants.
+async function saveTabs(env, actor, appId, body) {
+  const app = await getApp(env, appId);
+  if (!app) throw new HttpError(404, 'No such app.');
+  const stmts = [];
+  if (Array.isArray(body.tabs)) {
+    const defs = body.tabs.map((t, i) => ({ tab: String(t.tab || '').trim().toLowerCase(), label: String(t.label || t.tab || '').slice(0, 80), sort: i }))
+      .filter((t) => SETTING_KEY_RE.test(t.tab));
+    stmts.push(env.DB.prepare('DELETE FROM app_tabs WHERE app_id = ?').bind(appId),
+      ...defs.map((t) => env.DB.prepare('INSERT INTO app_tabs (app_id, tab, label, sort) VALUES (?, ?, ?, ?)').bind(appId, t.tab, t.label, t.sort)));
+  }
+  const known = Array.isArray(body.tabs)
+    ? new Set(body.tabs.map((t) => String(t.tab || '').trim().toLowerCase()))
+    : new Set((await env.DB.prepare('SELECT tab FROM app_tabs WHERE app_id = ?').bind(appId).all()).results.map((r) => r.tab));
+  stmts.push(env.DB.prepare('DELETE FROM role_tabs WHERE app_id = ?').bind(appId));
+  for (const [role, tabs] of Object.entries(body.role_tabs || {})) {
+    if (!app.roles.includes(role) || !Array.isArray(tabs)) continue;
+    for (const tab of new Set(tabs)) if (known.has(tab)) stmts.push(env.DB.prepare('INSERT INTO role_tabs (app_id, role, tab) VALUES (?, ?, ?)').bind(appId, role, tab));
+  }
+  await env.DB.batch(stmts);
+  await audit(env, actor.email, 'set tabs', appId, JSON.stringify(body.role_tabs || {}).slice(0, 300));
+  return { ok: true };
+}
+
 /* ---------- Admin: settings ---------- */
 
 async function listSettings(env) {
@@ -363,7 +395,7 @@ async function api(req, env, url) {
       try { logins = (await cf(env, '/access/identity_providers')).map((i) => ({ type: i.type, name: i.name })); } catch { /* shown as unknown */ }
     }
     return json({
-      users: await listUsers(env), apps: await listApps(env, { all: true }), settings: await listSettings(env),
+      users: await listUsers(env), apps: await listApps(env, { all: true }), settings: await listSettings(env), tabs: await listTabs(env),
       access_sync: cfConfigured(env), email_invites: Boolean(env.EMAIL_API_KEY && env.EMAIL_FROM),
       team_domain: teamDomain(env), logins,
     });
@@ -380,6 +412,7 @@ async function api(req, env, url) {
     }
   }
   if (resource === 'apps' && method === 'POST' && !id) return json(await saveApp(env, user, body));
+  if (resource === 'apps' && method === 'POST' && id && sub === 'tabs') return json(await saveTabs(env, user, id, body));
   if (resource === 'settings') {
     if (method === 'POST' && !id) return json(await saveSetting(env, user, body));
     if (method === 'DELETE' && id) return json(await deleteSetting(env, user, id));
@@ -404,6 +437,17 @@ export class Directory extends WorkerEntrypoint {
     const app = await getApp(this.env, appId);
     if (!app || !app.enabled || !app.access_aud) return null;
     return { team_domain: teamDomain(this.env), aud: app.access_aud };
+  }
+
+  // Tabs the caller may see in appId (array of tab ids). Bootstrap admins see every tab.
+  async tabs(email, appId) {
+    const user = await loadUser(this.env, normEmail(email));
+    const role = user?.apps[appId];
+    if (!role) return [];
+    const q = user.bootstrap
+      ? this.env.DB.prepare('SELECT tab FROM app_tabs WHERE app_id = ?').bind(appId)
+      : this.env.DB.prepare('SELECT tab FROM role_tabs WHERE app_id = ? AND role = ?').bind(appId, role);
+    return (await q.all()).results.map((r) => r.tab);
   }
 
   // The caller's role in appId (one of the app's roles) or null.
