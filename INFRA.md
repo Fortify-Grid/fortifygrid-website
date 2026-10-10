@@ -10,13 +10,12 @@ with one read-only DB user per app.
 ## 1. Status (update when it changes)
 | Item | State |
 |---|---|
-| Code: portal, admin, heatmap, CI; site assets self-hosted | ✅ |
-| Cloudflare: team `fortifyai`, Google + email-code logins, dashboard Access app + group, D1, Hyperdrive `heatmap-db` | ✅ created by `infra/cf-setup.mjs` |
-| `wrangler.jsonc` (portal + heatmap) filled | ✅ committed |
-| Token `fortifygrid-admin`: still needs Pages Edit + Workers Routes Edit | ⏳ human (USER_SETUP §4) |
-| Cutover: detach the Pages domains → deploy portal → `CF_API_TOKEN` secret → deploy heatmap → GitHub secrets → merge `portal-setup` → `main` | ⏳ agent (§4) |
-| Heatmap Access app (admin → Apps → Create Access) | ⏳ after deploy |
-| Open issues | Contact form doesn't send (`public/script.js` TODO). Old secrets in git history (owner chose not to rotate). AWS CLI uses root keys. 2026 short ISO names in ETL |
+| fortifygrid.com, /dashboard, heatmap.fortifygrid.com live on Workers; old Pages domains removed; GitHub Pages off | ✅ 2026-10-10 |
+| Login: Access team `fortifyai`, Google + email code; dashboard and heatmap Access apps + groups | ✅ |
+| Auto-deploy: push `main` → Actions (secrets set in both repos, token `fortifygrid-setup`) | ✅ |
+| Roles × tabs per app (admin → Apps → Tabs); heatmap tabs: filters, database, csv_upload, gis_layers, generators, results, search | ✅ |
+| Old heatmap A record (18.232.37.189, dead EC2) replaced by the Worker | ✅ |
+| Open | Contact form doesn't send. Secrets in git history not rotated (owner's choice). AWS CLI root keys. 2026 short ISO names. Old Pages project `fortifygrid-website` can be deleted |
 
 ## 2. Repos, accounts, IDs
 | Repo `Fortify-Grid/…` | Local folder | Serves |
@@ -46,7 +45,7 @@ with one read-only DB user per app.
 3. Commit, then `git push origin main`. **The push is the deploy.** Confirm with `gh run list -L 1` and the §6 checks.
 4. If it broke: `npx wrangler rollback`. Update §1 in the same commit when state changes.
 
-## 4. First deploy / cutover (agent, once the token has every permission in USER_SETUP §4)
+## 4. First deploy / cutover (done 2026-10-10; for a new account: deploy without `routes` first, then detach Pages + CNAMEs and redeploy with routes)
 ```bash
 set -a; . ~/.config/fortifygrid/secrets.env >/dev/null 2>&1; set +a
 export CLOUDFLARE_API_TOKEN=$CF_SETUP_TOKEN CLOUDFLARE_ACCOUNT_ID=$CF_ACCOUNT_ID
@@ -109,5 +108,7 @@ curl -sI https://heatmap.fortifygrid.com | grep -i location      # → Access lo
 - `schema.sql` must stay idempotent. Keep the `Directory.config` and `Directory.access` signatures.
 - Deploy the portal before any app.
 - An app returns 401 until admin → Apps shows its Access as ready.
+- New app tabs: mark UI panels `data-tab="<id>"`, add rows to `app_tabs` in `schema.sql`, enforce server-side with `PORTAL.tabs()`.
+- After DNS changes this Mac may cache failures: test with `curl --resolve host:443:172.67.184.166`.
 - CI refuses to deploy while any `wrangler.jsonc` still contains `REPLACE_`.
 - FGDataETL no longer tracks `.env`, so `git pull` on other clones deletes it. Back it up first.
