@@ -75,6 +75,7 @@ Admin flow: `/dashboard/admin` → save user → D1 → `syncAccessGroups()` rew
 
 | Thing | Where / name | Notes |
 |---|---|---|
+| Cloudflare account | `5b09f3b0f591d77cd46739113e886479`. Owner **admin@fortifygrid.com**; krishnan@fortifygrid.com is Super Admin (invited 2026-10-10) | Pick this account in the switcher before creating tokens |
 | Zone | `fortifygrid.com` (Cloudflare DNS; registrar Squarespace; MX Google) | |
 | Zero Trust team | `<team>.cloudflareaccess.com` | Login methods: Google (OAuth client in Google Cloud) + One-time PIN |
 | Access app: dashboard | domain `fortifygrid.com/dashboard`, group "FortifyGrid users" | Created by `infra/cf-setup.mjs portal` |
@@ -149,7 +150,7 @@ Wrangler on this Mac also has an Aceing login. Use `export XDG_CONFIG_HOME=$HOME
 
 ## 7. One-time setup (done once per Cloudflare account)
 
-1. Cloudflare dashboard as krishnan@fortifygrid.com: confirm the zone `fortifygrid.com` is in this account (move it if not).
+1. Cloudflare dashboard as krishnan@fortifygrid.com: switch to account `5b09f3b0…6479` (owner admin@fortifygrid.com) and confirm the zone `fortifygrid.com` is there.
 2. Zero Trust → choose a team name → Free plan.
 3. Google Cloud → Credentials → OAuth client (Web) → set the redirect URI from §6.
 4. Create the three tokens in §6.
