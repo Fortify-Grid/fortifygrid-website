@@ -146,7 +146,7 @@ a:focus-visible, .btn:focus-visible { outline: 2px solid var(--brand-light); out
 }
 
 /* What we do: framework graphic stays put while the stages scroll; the matching hexagon lights up */
-.framework { display: grid; grid-template-columns: 470px 1fr; gap: 64px; align-items: start; }
+.framework { display: grid; grid-template-columns: 540px 1fr; gap: 48px; align-items: start; }
 .fw-graphic { position: sticky; top: 116px; }
 .fw-graphic svg { width: 100%; height: auto; display: block; }
 .hex { transition: opacity .35s ease, filter .35s ease, transform .35s ease; transform-box: fill-box; transform-origin: center; opacity: .3; filter: grayscale(.7); }
@@ -213,3 +213,11 @@ main > section[id] { scroll-margin-top: 76px; }
 /* Staging banner adds 38px above the header; keep the scroll cue on screen */
 body:has(.stage-banner) .hero-full { min-height: calc(100vh - 114px); }
 @media (max-width: 640px) { body:has(.stage-banner) .hero-full { min-height: calc(100vh - 168px); } }
+
+/* About copy: lead paragraph, supporting paragraphs, goal line; quote stays beside it while reading */
+.about-copy { display: grid; gap: 20px; }
+.about-copy p { color: var(--muted); font-size: 18px; }
+.about-copy .lede { color: var(--text); }
+.about-copy .goal { color: var(--ink); font-weight: 700; }
+.about .quote { position: sticky; top: 116px; }
+@media (max-width: 900px) { .about .quote { position: static; } }
