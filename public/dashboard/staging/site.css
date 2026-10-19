@@ -219,5 +219,5 @@ body:has(.stage-banner) .hero-full { min-height: calc(100vh - 114px); }
 .about-copy p { color: var(--muted); font-size: 18px; }
 .about-copy .lede { color: var(--text); }
 .about-copy .goal { color: var(--ink); font-weight: 700; }
-.about .quote { position: sticky; top: 116px; }
-@media (max-width: 900px) { .about .quote { position: static; } }
+.quotes { display: grid; gap: 40px; position: sticky; top: 116px; }
+@media (max-width: 900px) { .quotes { position: static; } }
