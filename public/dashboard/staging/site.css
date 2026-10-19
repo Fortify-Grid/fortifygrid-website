@@ -223,3 +223,5 @@ body:has(.stage-banner) .hero-full { min-height: calc(100vh - 114px); }
 @media (max-width: 900px) { .quotes { position: static; } }
 /* About: one text size and colour for all copy and quotes */
 .about-copy p, .quote blockquote { font-size: 19px; line-height: 1.6; color: var(--text); }
+/* Line under the quotes tying them to Fortify: same size as About copy, aligned with the quote text */
+.quotes .principles { font-size: 19px; line-height: 1.6; color: var(--text); padding-left: 31px; }
