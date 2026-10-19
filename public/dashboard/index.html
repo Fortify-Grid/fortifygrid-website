@@ -32,10 +32,13 @@
       document.getElementById('who').textContent = me.email;
       document.getElementById('admin-link').hidden = !me.admin;
       if (me.notice) showMsg(document.getElementById('notice'), me.notice);
-      document.getElementById('tiles').innerHTML = me.apps.length
-        ? me.apps.map((a) => `<a class="tile" href="${esc(a.url)}"><h2>${esc(a.name)}</h2><p class="muted">${esc(a.description)}</p><span class="role">${esc(a.role)}</span></a>`).join('')
+      // Admins also get the staged website: the next version of fortifygrid.com, served under /dashboard so only signed-in users can open it.
+      const staged = me.admin
+        ? `<a class="tile" href="/dashboard/staging/"><h2>Staged website</h2><p class="muted">Walk through the next version of fortifygrid.com exactly as it will look, before it goes live.</p><span class="role">admin</span></a>`
         : '';
-      if (!me.apps.length) showMsg(msg, 'No apps yet. Ask a FortifyGrid admin to give you access.');
+      document.getElementById('tiles').innerHTML =
+        me.apps.map((a) => `<a class="tile" href="${esc(a.url)}"><h2>${esc(a.name)}</h2><p class="muted">${esc(a.description)}</p><span class="role">${esc(a.role)}</span></a>`).join('') + staged;
+      if (!me.apps.length && !staged) showMsg(msg, 'No apps yet. Ask a FortifyGrid admin to give you access.');
     } catch (e) {
       showMsg(msg, e.message, 'err');
     }
