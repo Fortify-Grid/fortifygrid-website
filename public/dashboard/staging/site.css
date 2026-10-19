@@ -221,3 +221,5 @@ body:has(.stage-banner) .hero-full { min-height: calc(100vh - 114px); }
 .about-copy .goal { color: var(--ink); font-weight: 700; }
 .quotes { display: grid; gap: 40px; position: sticky; top: 116px; }
 @media (max-width: 900px) { .quotes { position: static; } }
+/* About: one text size and colour for all copy and quotes */
+.about-copy p, .quote blockquote { font-size: 19px; line-height: 1.6; color: var(--text); }
