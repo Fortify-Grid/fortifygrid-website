@@ -225,3 +225,8 @@ body:has(.stage-banner) .hero-full { min-height: calc(100vh - 114px); }
 .about-copy p, .quote blockquote { font-size: 19px; line-height: 1.6; color: var(--text); }
 /* Line under the quotes tying them to Fortify: same size as About copy, aligned with the quote text */
 .quotes .principles { font-size: 19px; line-height: 1.6; color: var(--text); padding-left: 31px; }
+/* Right column: one continuous red rule beside both quotes and the principles line,
+   centred vertically against the paragraphs on the left */
+.about .quotes { position: static; align-self: center; border-left: 3px solid var(--accent-red); padding: 4px 0 4px 28px; gap: 32px; }
+.about .quotes .quote { border-left: none; padding: 0; }
+.about .quotes .principles { padding-left: 0; }
