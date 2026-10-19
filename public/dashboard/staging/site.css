@@ -230,3 +230,7 @@ body:has(.stage-banner) .hero-full { min-height: calc(100vh - 114px); }
 .about .quotes { position: static; align-self: center; border-left: 3px solid var(--accent-red); padding: 4px 0 4px 28px; gap: 32px; }
 .about .quotes .quote { border-left: none; padding: 0; }
 .about .quotes .principles { padding-left: 0; }
+/* Stage card titles take their hexagon's colour; amber darkened slightly so it reads on white */
+.fw-stage[data-hex="1"] h3 { color: var(--c1); }
+.fw-stage[data-hex="2"] h3 { color: var(--c2); }
+.fw-stage[data-hex="3"] h3 { color: #c47f00; }
