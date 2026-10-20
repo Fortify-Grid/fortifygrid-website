@@ -104,7 +104,7 @@ INSERT INTO role_tabs (app_id, role, tab)
 -- Roles: viewer sees results, analyst runs analyses, admin everything.
 INSERT OR IGNORE INTO apps (id, name, description, url, roles, sort, created_at, updated_at) VALUES
   ('revenue', 'Revenue Analysis', 'Utility bills + interval data: learned tariffs by utility, bill recreation, battery savings and payback.',
-   'https://revenue.fortifygrid.com/', '["viewer","analyst","admin"]', 3, datetime('now'), datetime('now'));
+   'https://rev-anal.fortifygrid.com/', '["viewer","analyst","admin"]', 3, datetime('now'), datetime('now'));
 INSERT OR IGNORE INTO app_tabs (app_id, tab, label, sort) VALUES
   ('revenue', 'analyze', 'Run analyses', 1),
   ('revenue', 'export', 'Export Excel / PDF', 2),
