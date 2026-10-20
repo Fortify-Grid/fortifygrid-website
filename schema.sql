@@ -98,3 +98,23 @@ INSERT INTO role_tabs (app_id, role, tab)
 INSERT INTO role_tabs (app_id, role, tab)
   SELECT 'query', 'admin', tab FROM app_tabs WHERE app_id = 'query'
   AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'query' AND role = 'admin');
+
+-- Revenue Analysis app (Fortify-Grid/revenue-analysis-module). Append to fortifygrid-website schema.sql (idempotent).
+-- Tabs: analyze = upload / run / change battery settings, export = Excel / PDF / zip, admin = delete customers.
+-- Roles: viewer sees results, analyst runs analyses, admin everything.
+INSERT OR IGNORE INTO apps (id, name, description, url, roles, sort, created_at, updated_at) VALUES
+  ('revenue', 'Revenue Analysis', 'Utility bills + interval data: learned tariffs by utility, bill recreation, battery savings and payback.',
+   'https://revenue.fortifygrid.com/', '["viewer","analyst","admin"]', 3, datetime('now'), datetime('now'));
+INSERT OR IGNORE INTO app_tabs (app_id, tab, label, sort) VALUES
+  ('revenue', 'analyze', 'Run analyses', 1),
+  ('revenue', 'export', 'Export Excel / PDF', 2),
+  ('revenue', 'admin', 'Delete customers', 3);
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'revenue', 'viewer', tab FROM app_tabs WHERE app_id = 'revenue' AND tab IN ('export')
+  AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'revenue');
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'revenue', 'analyst', tab FROM app_tabs WHERE app_id = 'revenue' AND tab IN ('analyze', 'export')
+  AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'revenue' AND role = 'analyst');
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'revenue', 'admin', tab FROM app_tabs WHERE app_id = 'revenue'
+  AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'revenue' AND role = 'admin');
