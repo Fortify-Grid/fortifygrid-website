@@ -14,7 +14,7 @@ with one read-only DB user per app.
 | Login: Access team `fortifyai`, Google + email code; dashboard and heatmap Access apps + groups | ✅ |
 | Auto-deploy: push `main` → Actions (secrets set in both repos, token `fortifygrid-setup`) | ✅ |
 | Roles × tabs per app (admin → Apps → Tabs); heatmap tabs: filters, database, csv_upload, gis_layers, generators, results, search | ✅ |
-| Data Query app `query.fortifygrid.com` (FGAI-RAG `apps/query/`): any exposed table/view/matview in all schemas via `query_ro` + Hyperdrive `query-db`; datasets + saved queries in D1 `fortifygrid-query`; tabs download/save/configure | ✅ 2026-10-10 |
+| Data Query app `query.fortifygrid.com` (FGAI-RAG `apps/query/`): any exposed table/view/matview in all schemas via `query_ro` + Hyperdrive `query-db`; datasets + saved queries in D1 `fortifygrid-query`; tabs download/save/configure/ercot (ERCOT prices view)/tb2m (TB2M view); header "Data status" reads `fortify.log_iso_tables` | ✅ 2026-10-10 |
 | Old heatmap A record (18.232.37.189, dead EC2) replaced by the Worker | ✅ |
 | Open | Contact form doesn't send. Secrets in git history not rotated (owner's choice). AWS CLI root keys. 2026 short ISO names. Old Pages project `fortifygrid-website` can be deleted |
 

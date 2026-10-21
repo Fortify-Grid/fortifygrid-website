@@ -84,20 +84,27 @@ INSERT INTO role_tabs (app_id, role, tab)
   SELECT 'heatmap', 'admin', tab FROM app_tabs WHERE app_id = 'heatmap'
   AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'heatmap' AND role = 'admin');
 
--- Data Query app (FGAI-RAG/query). Tabs: download = CSV export, save = save/delete queries, configure = choose datasets.
+-- Data Query app (FGAI-RAG/query). Tabs: download = CSV export, save = save/delete queries, configure = choose datasets,
+-- ercot = ERCOT prices view (hubs/nodes, monthly TB2/TB4, spike hours), tb2m = TB2M view (pasted nodes, TB2 across years).
 INSERT OR IGNORE INTO apps (id, name, description, url, roles, sort, created_at, updated_at) VALUES
   ('query', 'Data Query', 'Filter any exposed table or view with cascading lists, view or download results, save queries.',
    'https://query.fortifygrid.com/', '["viewer","admin"]', 2, datetime('now'), datetime('now'));
 INSERT OR IGNORE INTO app_tabs (app_id, tab, label, sort) VALUES
   ('query', 'download', 'Download CSV', 1),
   ('query', 'save', 'Save queries', 2),
-  ('query', 'configure', 'Configure datasets', 3);
+  ('query', 'configure', 'Configure datasets', 3),
+  ('query', 'ercot', 'ERCOT prices', 4),
+  ('query', 'tb2m', 'TB2M', 5);
 INSERT INTO role_tabs (app_id, role, tab)
-  SELECT 'query', 'viewer', tab FROM app_tabs WHERE app_id = 'query' AND tab IN ('download', 'save')
+  SELECT 'query', 'viewer', tab FROM app_tabs WHERE app_id = 'query' AND tab IN ('download', 'save', 'ercot', 'tb2m')
   AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'query');
 INSERT INTO role_tabs (app_id, role, tab)
   SELECT 'query', 'admin', tab FROM app_tabs WHERE app_id = 'query'
   AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'query' AND role = 'admin');
+-- Tabs added later: give each to viewer + admin once (an admin can remove it afterwards).
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'query', r.role, t.tab FROM (SELECT 'viewer' AS role UNION ALL SELECT 'admin') r, (SELECT 'ercot' AS tab UNION ALL SELECT 'tb2m') t
+  WHERE NOT EXISTS (SELECT 1 FROM role_tabs x WHERE x.app_id = 'query' AND x.tab = t.tab);
 
 -- Revenue Analysis app (Fortify-Grid/revenue-analysis-module). Append to fortifygrid-website schema.sql (idempotent).
 -- Tabs: analyze = upload / run / change battery settings, export = Excel / PDF / zip, admin = delete customers.
