@@ -108,8 +108,26 @@
 
     function inviteFallback(invite, email) {
       if (!invite || invite.sent) return;
-      // No email service configured: open the message in the admin's own mail app.
-      location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(invite.subject)}&body=${encodeURIComponent(invite.text)}`;
+      // No email service configured: show the invite to copy into any email or chat (or open it in a mail app).
+      const mail = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(invite.subject)}&body=${encodeURIComponent(invite.text)}`;
+      const d = document.createElement('dialog');
+      d.style.cssText = 'max-width:560px;width:calc(100% - 32px);border:1px solid #ccc;border-radius:10px;padding:18px';
+      d.innerHTML = `<h3 style="margin:0 0 6px">Invite for ${esc(email)}</h3>
+        <p style="margin:0 0 8px;font-size:13px;color:#666">Copy this and send it from any email or chat.</p>
+        <textarea readonly rows="10" style="width:100%;font:13px system-ui;padding:8px;box-sizing:border-box"></textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+          <a class="ghost" href="${mail}">Open in mail app</a><button type="button" data-copy>Copy</button><button type="button" class="ghost" data-close>Close</button></div>`;
+      const ta = d.querySelector('textarea');
+      ta.value = `Subject: ${invite.subject}\n\n${invite.text}`;
+      d.querySelector('[data-copy]').onclick = async (e) => {
+        try { await navigator.clipboard.writeText(ta.value); } catch { ta.select(); document.execCommand('copy'); }
+        e.target.textContent = 'Copied';
+      };
+      d.querySelector('[data-close]').onclick = () => d.close();
+      d.addEventListener('close', () => d.remove());
+      document.body.appendChild(d);
+      d.showModal();
+      ta.select();
     }
     const report = (r, done) => showMsg(msg, [done, r.note, r.sync?.note].filter(Boolean).join(' '), r.sync && !r.sync.synced ? '' : 'ok');
 
@@ -196,7 +214,7 @@
         report(await api(`admin/users/${encodeURIComponent(email)}`, { method: 'DELETE' }), `Removed ${email}.`);
       } else if (act === 'invite') {
         const r = await api(`admin/users/${encodeURIComponent(email)}/invite`, { method: 'POST', body: {} });
-        showMsg(msg, r.invite.sent ? `Invite sent to ${email}.` : 'Opening the invite in your mail app.', 'ok');
+        showMsg(msg, r.invite.sent ? `Invite sent to ${email}.` : 'Invite ready - copy it and send it.', 'ok');
         inviteFallback(r.invite, email);
       }
       await load();
