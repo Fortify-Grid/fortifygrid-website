@@ -380,6 +380,16 @@ async function deleteSetting(env, actor, key) {
   return { ok: true };
 }
 
+// Tabs a user may see in appId. Bootstrap admins see every tab.
+async function appTabs(env, user, appId) {
+  const role = user?.apps[appId];
+  if (!role) return [];
+  const q = user.bootstrap
+    ? env.DB.prepare('SELECT tab FROM app_tabs WHERE app_id = ?').bind(appId)
+    : env.DB.prepare('SELECT tab FROM role_tabs WHERE app_id = ? AND role = ?').bind(appId, role);
+  return (await q.all()).results.map((r) => r.tab);
+}
+
 /* ---------- Router ---------- */
 
 async function api(req, env, url) {
@@ -459,13 +469,7 @@ export class Directory extends WorkerEntrypoint {
 
   // Tabs the caller may see in appId (array of tab ids). Bootstrap admins see every tab.
   async tabs(email, appId) {
-    const user = await loadUser(this.env, normEmail(email));
-    const role = user?.apps[appId];
-    if (!role) return [];
-    const q = user.bootstrap
-      ? this.env.DB.prepare('SELECT tab FROM app_tabs WHERE app_id = ?').bind(appId)
-      : this.env.DB.prepare('SELECT tab FROM role_tabs WHERE app_id = ? AND role = ?').bind(appId, role);
-    return (await q.all()).results.map((r) => r.tab);
+    return appTabs(this.env, await loadUser(this.env, normEmail(email)), appId);
   }
 
   // The caller's role in appId (one of the app's roles) or null.
@@ -487,6 +491,16 @@ async function portalHost(req, env, url) {
     return Response.redirect(url.toString(), 301);
   }
   if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/cdn-cgi/')) return env.ASSETS.fetch(req);
+  // /ide/ (IDE app, static) needs an ide role; /ide/files/ (IFC, Excel) also needs the downloads tab.
+  if (/^\/ide(\/|$)/.test(url.pathname)) {
+    try {
+      const user = await currentUser(req, env);
+      if (!user.apps.ide) throw new HttpError(403, 'No IDE access. Ask a FortifyGrid admin.');
+      if (url.pathname.startsWith('/ide/files/') && !(await appTabs(env, user, 'ide')).includes('downloads')) throw new HttpError(403, 'Your role cannot download files.');
+    } catch (e) {
+      return json({ message: e.message }, e.status || 500);
+    }
+  }
   const inner = new URL(url);
   inner.pathname = `/dashboard${url.pathname}`;
   const res = await env.ASSETS.fetch(new Request(inner, req));
