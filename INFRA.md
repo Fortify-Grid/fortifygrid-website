@@ -21,13 +21,14 @@ Data: AWS RDS Postgres (read-only user per app) ← Hyperdrive ← app Worker.  
 |---|---|---|
 | fortifygrid.com | fortifygrid-website | Public site (`public/`) |
 | app.fortifygrid.com | fortifygrid-website | Portal: tiles, admin (`/admin/`), API (`/api/`). Files in `public/dashboard/`, served at the host root |
-| app.fortifygrid.com/ide/ | fortifygrid-website | IDE plant viewer (static, `public/dashboard/ide/`), gated in `worker.js` |
+| app.fortifygrid.com/ide/ | fortifygrid-ide | IDE / BIM viewer. The portal checks the role, then forwards to the `fortifygrid-ide` Worker (service binding `IDE`, no public route) |
 | heatmap / query.fortifygrid.com | FGAI-RAG | `apps/heatmap/`, `apps/query/`. Own Workers |
 | rev-anal.fortifygrid.com | revenue-analysis-module | Revenue Analysis. Own Worker |
 
 **New apps go under `app.fortifygrid.com/<app>/`, not on a new subdomain:**
-- A static app is files in `public/dashboard/<app>/`, plus a role check in `worker.js` (copy the `/ide/` block).
-- An app with its own API gets its own Worker, and the portal forwards `/<app>/` to it through a service binding. Not built yet; until it is, use the subdomain pattern below.
+- Each app has its own repo and Worker, with no routes and `workers_dev` off.
+- The portal checks the role, then forwards `/<app>/*` over a service binding: copy the `/ide/` block in `worker.js` and the `IDE` entry in `wrangler.jsonc`.
+- The app Worker removes the `/<app>` prefix. Deploy the app before the portal.
 
 Subdomain apps move to the portal path when they are next touched.
 
@@ -35,7 +36,7 @@ Subdomain apps move to the portal path when they are next touched.
 | Repo `Fortify-Grid/…` | Working folder (Google Drive) |
 |---|---|
 | fortifygrid-website | `Shared drives/4. Fortify AI LLC/11. AI Code/6. FortifyGrid Website` |
-| fortifygrid-ide | `Shared drives/10. Corporate Docs/3. Knowledge base/BTM/IDE` (engine only) |
+| fortifygrid-ide | `Shared drives/4. Fortify AI LLC/11. AI Code/7. Fortify IDE-BIM` |
 | FGAI-RAG | `Shared drives/4. Fortify AI LLC/11. AI Code/2. FGAI-RAG` |
 | revenue-analysis-module | `Shared drives/4. Fortify AI LLC/11. AI Code/5. Revenue Analysis` |
 | FGDataETL | `~/FortifyAI/FGDataETL` (ETL into RDS, not Cloudflare) |
@@ -84,7 +85,7 @@ Drive and Dropbox are for editing only. Git is what deploys. Rules:
 5. The portal deploys before any app. Its `schema.sql` must stay idempotent; it runs on every deploy.
 
 ## New app
-- **Static:** add `public/dashboard/<app>/`, a gate in `worker.js` (copy the `/ide/` block), and app, tab and role rows in `schema.sql` (copy the `ide` rows). Push.
+- **Under the portal:** copy `fortifygrid-ide/app/` (Worker + `public/`) into a new repo, add a gate + binding in the portal (copy `/ide/`) and app, tab and role rows in `schema.sql` (copy the `ide` rows). Deploy the app, then the portal.
 - **With data:** copy `FGAI-RAG/apps/query/` (Worker = `appWorker({ appId, devTabs, api })`), then:
   1. Create a read-only DB user as `postgres`: `CREATE ROLE <app>_ro LOGIN PASSWORD '…' CONNECTION LIMIT 20; ALTER ROLE <app>_ro SET statement_timeout='30s'; ALTER ROLE <app>_ro SET default_transaction_read_only=on;`, then grant `CONNECT` and schema `USAGE` + `SELECT`.
   2. `DATABASE_URL=… node infra/cf-setup.mjs hyperdrive <app> <path>/wrangler.jsonc` (secrets loaded).

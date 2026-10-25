@@ -491,7 +491,7 @@ async function portalHost(req, env, url) {
     return Response.redirect(url.toString(), 301);
   }
   if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/cdn-cgi/')) return env.ASSETS.fetch(req);
-  // /ide/ (IDE app, static) needs an ide role; /ide/files/ (IFC, Excel) also needs the downloads tab.
+  // /ide/ (IDE app) needs an ide role; /ide/files/ (IFC, Excel) also needs the downloads tab. Then forward to the app.
   if (/^\/ide(\/|$)/.test(url.pathname)) {
     try {
       const user = await currentUser(req, env);
@@ -500,6 +500,7 @@ async function portalHost(req, env, url) {
     } catch (e) {
       return json({ message: e.message }, e.status || 500);
     }
+    return env.IDE.fetch(req); // fortifygrid-ide Worker (repo Fortify-Grid/fortifygrid-ide), no public route
   }
   const inner = new URL(url);
   inner.pathname = `/dashboard${url.pathname}`;

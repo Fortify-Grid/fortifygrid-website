@@ -31,6 +31,8 @@
     "EMAIL_REPLY_TO": "krishnan@fortifygrid.com"
     // Secrets (npx wrangler secret put …): CF_API_TOKEN (Access: Groups + Apps and Policies edit), EMAIL_API_KEY (optional).
   },
+  // App Workers without a public route, reached at app.fortifygrid.com/<app>/ after the role check in worker.js.
+  "services": [{ "binding": "IDE", "service": "fortifygrid-ide" }],
   "d1_databases": [
     { "binding": "DB", "database_name": "fortifygrid-portal", "database_id": "e31551d1-1209-4368-ab91-047be118bc45" }
   ],

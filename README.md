@@ -6,17 +6,16 @@ One Cloudflare Worker (`worker.js`) serves:
   - Tiles: `/`
   - Admin (users, apps, roles, tabs, settings): `/admin/`
   - Portal API: `/api/`
-  - Apps hosted here: `/ide/` (Comstock plant viewer)
+  - `/ide/`: role check, then forwarded to the IDE app (repo `fortifygrid-ide`)
 
 Platform wiring is in INFRA.md. Human setup steps are in USER_SETUP.md.
 
 | Path | What |
 |---|---|
-| `worker.js` | Routing, Access JWT check, roles (D1), admin API, Access group sync, `Directory` RPC for app Workers, `/ide/` gate |
+| `worker.js` | Routing, Access JWT check, roles (D1), admin API, Access group sync, `Directory` RPC for app Workers, `/<app>/` gate + forward |
 | `schema.sql` | Portal D1 tables and app rows. Idempotent; runs on every deploy |
 | `public/` | Public site |
 | `public/dashboard/` | Portal pages (`index.html`, `admin/`, `staging/`) |
-| `public/dashboard/ide/` | IDE viewer (single `index.html`) and the engine's IFC / Excel files (`files/`, downloads tab only) |
 | `infra/cf-setup.mjs` | One-time Cloudflare setup (Access, Hyperdrive) |
 
 ```bash
