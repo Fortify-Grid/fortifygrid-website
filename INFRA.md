@@ -2,6 +2,8 @@
 
 The human's steps are in **USER_SETUP.md**. This file covers everything an agent does. Keep §1 status current.
 
+**This file is the master reference for the whole FortifyGrid platform** (site, portal, every app). Any new session or machine: read this first.
+
 **Pattern:** a Cloudflare Worker with static assets sits behind Cloudflare Access, where people sign in with Google
 or a one-time email code. The Worker verifies the Access token, roles live in D1, and admin saves sync emails into
 Access groups. Pushing to `main` deploys through GitHub Actions. Data comes from AWS RDS Postgres through Hyperdrive,
@@ -18,6 +20,7 @@ with one read-only DB user per app.
 | Roles × tabs per app (admin → Apps → Tabs); heatmap tabs: filters, database, csv_upload, gis_layers, generators, results, search | ✅ |
 | Data Query app `query.fortifygrid.com` (FGAI-RAG `apps/query/`): any exposed table/view/matview in all schemas via `query_ro` + Hyperdrive `query-db`; datasets + saved queries in D1 `fortifygrid-query`; tabs download/save/configure/ercot (ERCOT prices view)/tb2m (TB2M view)/ancillary (Ancillary view); header "Data status" reads `fortify.log_iso_tables` | ✅ 2026-10-10 |
 | Old heatmap A record (18.232.37.189, dead EC2) replaced by the Worker | ✅ |
+| IDE deploy: done from Mac 2026-10-24. CI deploys on push once repo secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` are set on `Fortify-Grid/fortifygrid-ide` (owner to set) | ⏳ |
 | Open | Contact form doesn't send. Secrets in git history not rotated (owner's choice). AWS CLI root keys. 2026 short ISO names. Old Pages project `fortifygrid-website` can be deleted |
 
 ## 2. Repos, accounts, IDs
@@ -26,6 +29,7 @@ with one read-only DB user per app.
 | `fortifygrid-website` | `Shared drives/4. Fortify AI LLC/11. AI Code/6. FortifyGrid Website` | fortifygrid.com: `public/` site; app.fortifygrid.com: `worker.js` portal (files in `public/dashboard/`, served at the host root: `/`, `/admin/`, `/staging/`, API `/api/`) |
 | `fortifygrid-ide` | `Shared drives/10. Corporate Docs/3. Knowledge base/BTM/IDE` | ide.fortifygrid.com: Python IDE model (`engine/`) + app Worker (`app/`, own copy of `app-worker.js`) |
 | `FGAI-RAG` | `…/11. AI Code/2. FGAI-RAG` | One folder per app: `apps/heatmap/` (worker + `web/` viewer) → heatmap.fortifygrid.com, `apps/query/` → query.fortifygrid.com. Shared Access/role code: `shared/app-worker.js`. Website repo = site + portal only |
+| `revenue-analysis-module` | `…/11. AI Code/5. Revenue Analysis` | rev-anal.fortifygrid.com (own copy of `app-worker.js`) |
 | `FGDataETL` | `~/FortifyAI/FGDataETL` | ETL into RDS `fortify` (not Cloudflare) |
 
 - **Which repo:**
@@ -42,6 +46,17 @@ with one read-only DB user per app.
 - **This Mac:**
   - `gh` must be `krishnanraghu`; run `gh auth switch -u krishnanraghu` if a push is denied.
   - For wrangler, pass the token through `CLOUDFLARE_API_TOKEN` (the default OAuth login is a different account).
+
+## 2a. New machine / new session (one-time)
+Everything that runs lives in Cloudflare; all code lives in GitHub (Fortify-Grid org). Google Drive folders above are
+working copies. Nothing else is needed except these local items, which are never in git or Drive:
+1. `~/.config/fortifygrid/secrets.env` (USER_SETUP.md §5). Keep a copy in a password manager.
+2. `gh auth login` as `krishnanraghu`. If another account is active, push with that account's token per repo
+   (`git config credential.https://github.com.helper` → `gh auth token --user krishnanraghu`) instead of switching globally.
+3. Node 22 (`npm install` per repo for wrangler). Python 3.12+ venv **outside Drive** for the IDE engine:
+   `python3 -m venv ~/.venvs/comstock-ide && ~/.venvs/comstock-ide/bin/pip install -r engine/requirements.txt`.
+4. Don't let two machines edit the same Drive-synced `.git` at once; on a second machine prefer a fresh `git clone`.
+5. If npm errors on `~/.npm` permissions, use `npm_config_cache=$HOME/.cache/npm-fortifygrid`.
 
 ## 3. Agent workflow (every change)
 1. Pick the repo. Edit. No secrets in tracked files; no SQL from the browser.
@@ -106,6 +121,14 @@ curl -sI https://heatmap.fortifygrid.com | grep -i location      # → Access lo
 3. `DATABASE_URL=… node infra/cf-setup.mjs hyperdrive <app> <path>/app/wrangler.jsonc` (with the secrets loaded).
 4. Admin → Apps: id, name, URL, roles, **Create Cloudflare Access**.
 5. Copy `.github/workflows/deploy-query.yml`, set the GitHub secrets, push. The human adds users.
+
+## 7a. IDE app specifics
+- Repo `Fortify-Grid/fortifygrid-ide`: `engine/` (Python model: YAML library + project → IFC4, Excel, scene, QA) and `app/` (Worker).
+- Update a project: edit `engine/projects/<id>/*.yaml` → `python -m ide build projects/<id> --publish ../app/public/projects`
+  → `pytest` → commit → push (deploys). Files under `app/public/projects/` are served only via `/api/scene`, `/api/download`.
+- Roles viewer / engineer / admin; tabs `qa`, `downloads` (admin → Apps → IDE → Tabs). Access group "IDE — Digital Engineering Model users".
+- Manual deploy: `cd app && CLOUDFLARE_API_TOKEN=$CF_SETUP_TOKEN CLOUDFLARE_ACCOUNT_ID=$CF_ACCOUNT_ID npx wrangler deploy`.
+- New folder for tiles: admin → Apps → Folder (free text).
 
 ## 8. Rules & gotchas
 - **Data lives in AWS RDS; D1 is only for app metadata** (users, roles, settings, configs, saved query definitions). Never copy grid data or query results into D1, KV or R2. Apps read RDS live through Hyperdrive.
