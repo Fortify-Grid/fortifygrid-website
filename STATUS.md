@@ -12,11 +12,11 @@ Updated 2026-10-25.
 | IDE at **app.fortifygrid.com/ide/**: the portal checks the role and forwards to the `fortifygrid-ide` Worker (no public route) | 2026-10-25 |
 
 ## Open
-- Retire the old `fortifygrid-ide` Worker, its ide.fortifygrid.com domain, and its Access app and group.
 - Contact form doesn't send.
 - Secrets in git history not rotated (owner's choice).
 - AWS CLI root keys.
 - 2026 short ISO names.
 - Old Pages project `fortifygrid-website` can be deleted.
-- Move subdomain apps under `app.fortifygrid.com/<app>/` (needs the forwarding gateway, INFRA.md "Hosts").
-- `INFRA-PATTERN.md` (untracked draft, gateway pattern) is folded into INFRA.md. Delete it when you agree.
+- Delete archived repo `comstock-viewer` (needs `gh auth refresh -s delete_repo`).
+- Add STATUS.md to FGAI-RAG and FGDataETL. In revenue-analysis-module, rename HANDOFF.md to STATUS.md (it has an uncommitted edit).
+- Move subdomain apps under `app.fortifygrid.com/<app>/` (copy the `/ide/` forwarding pattern).
