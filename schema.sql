@@ -136,19 +136,20 @@ CREATE TABLE IF NOT EXISTS app_folders (
   folder_sort INTEGER NOT NULL DEFAULT 100
 );
 
--- IDE — Integrated Digital Engineering model (Fortify-Grid/fortifygrid-ide). Static 3D viewer + IFC / Excel outputs.
--- Tabs: qa = QA findings panel, downloads = IFC / Excel files. Roles: viewer looks, engineer also downloads, admin everything.
+-- IDE: Comstock plant viewer at app.fortifygrid.com/ide/ (files in public/dashboard/ide/, gated in worker.js).
+-- Engine (IFC / Excel): Fortify-Grid/fortifygrid-ide. Roles: viewer looks; engineer, admin also download (tab downloads).
 INSERT OR IGNORE INTO apps (id, name, description, url, roles, sort, created_at, updated_at) VALUES
-  ('ide', 'IDE — Digital Engineering Model', 'BESS site digital twin: layered 3D model, cable and trench trace, foundation loads, QA, IFC / Excel.',
-   'https://ide.fortifygrid.com/', '["viewer","engineer","admin"]', 4, datetime('now'), datetime('now'));
-INSERT OR IGNORE INTO app_tabs (app_id, tab, label, sort) VALUES
-  ('ide', 'qa', 'QA findings', 1),
-  ('ide', 'downloads', 'Download IFC / Excel', 2);
+  ('ide', 'IDE — Digital Engineering Model', 'Comstock BESS plant viewer: spatial, electrical, civil; measure; BOM and work statement; IFC / Excel.',
+   'https://app.fortifygrid.com/ide/', '["viewer","engineer","admin"]', 4, datetime('now'), datetime('now'));
+-- One-time move from ide.fortifygrid.com (own Access app retired).
+UPDATE apps SET url = 'https://app.fortifygrid.com/ide/', access_group_id = '', access_aud = '',
+  description = 'Comstock BESS plant viewer: spatial, electrical, civil; measure; BOM and work statement; IFC / Excel.'
+  WHERE id = 'ide' AND url <> 'https://app.fortifygrid.com/ide/';
+DELETE FROM role_tabs WHERE app_id = 'ide' AND tab = 'qa';
+DELETE FROM app_tabs WHERE app_id = 'ide' AND tab = 'qa';
+INSERT OR IGNORE INTO app_tabs (app_id, tab, label, sort) VALUES ('ide', 'downloads', 'Download IFC / Excel', 1);
 INSERT INTO role_tabs (app_id, role, tab)
-  SELECT 'ide', 'viewer', tab FROM app_tabs WHERE app_id = 'ide' AND tab IN ('qa')
-  AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'ide');
-INSERT INTO role_tabs (app_id, role, tab)
-  SELECT 'ide', r.role, t.tab FROM (SELECT 'engineer' AS role UNION ALL SELECT 'admin') r, (SELECT 'qa' AS tab UNION ALL SELECT 'downloads') t
+  SELECT 'ide', r.role, 'downloads' FROM (SELECT 'engineer' AS role UNION ALL SELECT 'admin') r
   WHERE NOT EXISTS (SELECT 1 FROM role_tabs x WHERE x.app_id = 'ide' AND x.role = r.role);
 
 INSERT OR IGNORE INTO app_folders (app_id, folder, folder_sort) VALUES

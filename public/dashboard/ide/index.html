@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Comstock BESS Viewer</title>
+<style>
+/* Layout: full-height tool — header bar, object/area/drawing rail left, 3D canvas centre, detail drawer right. */
+:root{
+  --bg:#eef1f4; --panel:#ffffff; --ink:#1d2430; --mute:#5f6b7a; --line:#dde3ea; --float:rgba(255,255,255,.93);
+  --accent:#1f6feb; --accent-ink:#ffffff; --ok:#1a7f37; --warn:#a15c00; --bad:#c62828;
+  --note-bg:#fff7e3; --note-line:#efd79c; --tip-bg:#1d2430; --tip-ink:#ffffff; --scrim:rgba(10,14,20,.42);
+  --mv:#d7263d; --dc:#f28c28; --lv:#2b6cb0; --com:#2f9e44; --gnd:#b87333;
+  --f-ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --f-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161c; --panel:#1a1f27; --ink:#e6eaf0; --mute:#9aa5b4; --line:#2c333d; --float:rgba(26,31,39,.93);
+  --accent:#4c8dff; --accent-ink:#0b1220; --ok:#4cc26b; --warn:#f0a83a; --bad:#ff6b6b;
+  --note-bg:#2a2414; --note-line:#5c4a1c; --tip-bg:#e6eaf0; --tip-ink:#12161c; --scrim:rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161c; --panel:#1a1f27; --ink:#e6eaf0; --mute:#9aa5b4; --line:#2c333d; --float:rgba(26,31,39,.93);
+  --accent:#4c8dff; --accent-ink:#0b1220; --ok:#4cc26b; --warn:#f0a83a; --bad:#ff6b6b;
+  --note-bg:#2a2414; --note-line:#5c4a1c; --tip-bg:#e6eaf0; --tip-ink:#12161c; --scrim:rgba(0,0,0,.6); color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:13px/1.45 var(--f-ui);display:flex;flex-direction:column;overflow:hidden}
+header{flex:none;min-height:52px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:15px;margin:0;white-space:nowrap}
+header h1 small{color:var(--mute);font-weight:400;margin-left:6px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:7px 12px;white-space:nowrap;cursor:pointer;color:var(--ink);font:inherit}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--accent);color:var(--accent-ink)}
+button:focus-visible,.row:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.spacer{flex:1}
+.btn{text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 10px;cursor:pointer;font:inherit;color:var(--ink)}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#app{flex:1;min-height:0;display:flex;position:relative}
+aside{background:var(--panel);overflow:auto}
+#left{width:300px;flex:none;border-right:1px solid var(--line);display:flex;flex-direction:column}
+#right{width:340px;flex:none;border-left:1px solid var(--line);padding:14px}
+.tabs{display:flex;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}
+.tabs button{flex:1;border:0;background:none;padding:10px 4px;cursor:pointer;font:inherit;color:var(--mute);border-bottom:2px solid transparent}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.pane{padding:12px;display:none}
+.pane.on{display:block}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:14px 0 6px}
+h3:first-child{margin-top:0}
+.row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer}
+.row:hover{background:var(--bg)}
+.sw{width:10px;height:10px;border-radius:2px;flex:none}
+.chip{font-size:11px;padding:1px 6px;border-radius:10px;border:1px solid currentColor;white-space:nowrap}
+.chip.have{color:var(--ok)} .chip.partial{color:var(--warn)} .chip.missing{color:var(--bad)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+td,th{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:12px}
+.tw{overflow-x:auto}
+#view{flex:1;position:relative;min-width:0;min-height:0;isolation:isolate}
+#view canvas{display:block}
+#hud{position:absolute;left:10px;bottom:10px;background:var(--float);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:12px var(--f-mono);pointer-events:none;max-width:calc(100% - 20px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hint{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--tip-bg);color:var(--tip-ink);border-radius:8px;padding:6px 12px;font-size:12px;pointer-events:none;max-width:calc(100% - 20px)}
+#hint:empty{display:none}
+#legend{position:absolute;right:10px;top:10px;background:var(--float);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px}
+#legend:empty{display:none}
+#legend div{display:flex;align-items:center;gap:6px}
+.lbl{font:11px var(--f-ui);background:rgba(29,36,48,.82);color:#ffffff;padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none}
+.mlbl{font:12px var(--f-mono);background:var(--panel);color:var(--ink);border:1.5px solid var(--accent);padding:3px 7px;border-radius:6px;white-space:nowrap;pointer-events:none}
+.kv td:first-child{color:var(--mute);width:42%}
+.det h2{font-size:16px;margin:0 0 2px;text-wrap:balance}
+.det .sub{color:var(--mute);margin-bottom:10px}
+.close{float:right;border:0;background:none;font-size:18px;cursor:pointer;color:var(--mute)}
+#modal{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;z-index:20;padding:16px}
+#modal .box{background:var(--panel);color:var(--ink);border-radius:12px;width:min(1000px,100%);max-height:100%;display:flex;flex-direction:column;min-width:0}
+#modal .hd{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+#modal .bd{padding:12px 16px;overflow:auto;min-width:0}
+#modal pre{white-space:pre-wrap;font:12px/1.5 var(--f-mono)}
+.note{background:var(--note-bg);border:1px solid var(--note-line);border-radius:8px;padding:8px 10px;font-size:12px;margin:8px 0}
+a{color:var(--accent)}
+.req{max-width:78ch;line-height:1.55}
+.req h2{font-size:18px;margin:4px 0 4px;text-wrap:balance}
+.req h4{font-size:14px;margin:18px 0 6px}
+.req p,.req li{font-size:13.5px}
+.req .meta{color:var(--mute);font-size:12px}
+.set{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center;max-width:520px}
+.set label{font-weight:600}.set small{display:block;color:var(--mute);font-weight:400}
+@media (max-width:1200px){header h1 small{display:none}.seg button{padding:6px 8px}}
+@media (max-width:900px){#left{width:240px}#right{position:absolute;right:0;top:0;bottom:0;z-index:5;width:min(340px,100%);box-shadow:0 0 24px var(--scrim)}}
+@media (max-width:640px){#app{flex-direction:column}#view{flex:1.3}#left{width:auto;flex:1;border-right:0;border-top:1px solid var(--line)}header h1{font-size:14px}}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<header>
+  <a id="backApps" class="btn" href="/" hidden>← Apps</a>
+  <h1>VV.5 Comstock BESS <small>8 MW / 20 MWh · AEP 12.47 kV</small></h1>
+  <div class="seg" id="views">
+    <button data-v="spatial" class="on">1 · Spatial</button>
+    <button data-v="electrical">2 · Electrical</button>
+    <button data-v="civil">3 · Civil / Structural</button>
+  </div>
+  <div class="seg" id="tools">
+    <button data-t="orbit" class="on" title="Rotate / pan / zoom">Navigate</button>
+    <button data-t="measure" title="Click two points">Measure</button>
+    <button data-t="area" title="Drag a box in plan">Select area</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="seg" id="cams">
+    <button data-c="iso">3D</button><button data-c="top">Plan</button><button data-c="front">Elev</button>
+  </div>
+  <span id="appDl" hidden></span>
+  <button class="btn" id="adminBtn" title="Requirements, model basis and settings">Admin</button>
+</header>
+
+<div id="app">
+  <aside id="left">
+    <div class="tabs">
+      <button data-p="objects" class="on">Objects</button>
+      <button data-p="areas">Areas &amp; BOM</button>
+      <button data-p="mdl">Drawings</button>
+    </div>
+    <div class="pane on" id="p-objects"></div>
+    <div class="pane" id="p-areas"></div>
+    <div class="pane" id="p-mdl"></div>
+  </aside>
+  <main id="view"><div id="hint"></div><div id="legend"></div><div id="hud">Hover the model for coordinates</div></main>
+  <aside id="right" hidden></aside>
+</div>
+
+<div id="modal" hidden><div class="box" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="hd"><strong id="mTitle"></strong><div class="spacer"></div><span id="mBtns"></span><button class="btn" id="mClose">Close</button></div>
+  <div class="bd" id="mBody"></div>
+</div></div>
+
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {CSS2DRenderer, CSS2DObject} from 'three/addons/renderers/CSS2DRenderer.js';
+
+/* ============================================================
+   UNITS: feet. PLANT GRID: origin = SW fence corner, +x along the
+   long fence (bearing N38°17'15"E per plot plan E100), +y across,
+   z = elevation above finished grade.  three.js: X=x, Y=z, Z=-y.
+   Sources: E-301 (60% equip layout), PNA-IND-FORT-001 sh.03 (GA +
+   survey point table), E-200 SLD, E-403 cable schedule, 60% BOM.
+   ============================================================ */
+const L = (x, y, z = 0) => new THREE.Vector3(x, z, -y);
+const PDFS = ['localhost', '127.0.0.1'].includes(location.hostname) || location.protocol === 'file:'; // drive copy: source PDFs sit next to the page
+const APP = /(^|\.)fortifygrid\.com$/.test(location.hostname);                                            // ide.fortifygrid.com (portal sign-in)
+const LOCAL = PDFS || APP;                                                                                 // direct page: real downloads and print
+const PREF = (() => { try { return JSON.parse(localStorage.getItem('cms-viewer-prefs') || '{}'); } catch { return {}; } })();
+let UNITS = PREF.units || 'ft';
+const FT = v => { if (UNITS === 'm') return `${(v * 0.3048).toFixed(2)} m`; const s = v < 0 ? '-' : ''; v = Math.abs(v); let f = Math.floor(v), i = Math.round((v - f) * 12); if (i === 12) { f++; i = 0; } return `${s}${f}'-${i}"`; };
+const r1 = v => Math.round(v * 10) / 10;
+
+// ---- survey control (PNA sheet 03 point table, state plane US ft) ----
+const AZ = 38.2875 * Math.PI / 180, S = Math.sin(AZ), C = Math.cos(AZ);
+const SV = {
+  P6: [13824672.4665, 1289927.9870], P5: [13824689.5560, 1289938.3099], P4: [13824706.6108, 1289948.7618],
+  P3: [13824723.6981, 1289959.1453], P2: [13824740.7857, 1289969.5290], P1: [13824757.8733, 1289979.9127],
+  T1: [13824675.7877, 1289946.5376], RP: [13824676.1525, 1289941.9415]
+};
+const ANC = { x: 98.6, y: 50.8, N: SV.P6[0], E: SV.P6[1], lat: 29.745115, lon: -101.138526 }; // P6 located on GA
+const toLocal = ([N, E]) => { const dN = N - ANC.N, dE = E - ANC.E; return { x: ANC.x + dE * S + dN * C, y: ANC.y - dE * C + dN * S }; };
+const toSP = (x, y) => { const dx = x - ANC.x, dy = y - ANC.y; const dE = dx * S - dy * C, dN = dx * C + dy * S;
+  return { N: ANC.N + dN, E: ANC.E + dE, lat: ANC.lat + dN * 0.3048 / 111320, lon: ANC.lon + dE * 0.3048 / (111320 * Math.cos(ANC.lat * Math.PI / 180)) }; };
+
+// ---- scene ----
+const view = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+view.prepend(renderer.domElement);
+const lr = new CSS2DRenderer(); lr.domElement.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none';
+view.appendChild(lr.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#dfe7ee');
+scene.fog = new THREE.Fog('#dfe7ee', 500, 1100);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.5, 3000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.495;
+
+scene.add(new THREE.HemisphereLight('#ffffff', '#b8a787', 1.1));
+const sun = new THREE.DirectionalLight('#fff6e8', 2.2);
+sun.position.copy(L(-60, -140, 220)); sun.target.position.copy(L(61, 44, 0));
+sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+Object.assign(sun.shadow.camera, { left: -170, right: 170, top: 170, bottom: -170, near: 10, far: 700 });
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.05;
+scene.add(sun, sun.target);
+
+const M = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0.05, ...o });
+const MAT = {
+  white: M('#f3f4f6', { roughness: 0.45 }), seam: M('#9aa3ad'), hvac: M('#c9ced5', { roughness: 0.5 }), blue: M('#1f6feb', { roughness: 0.4 }),
+  inv: M('#e9ecef', { roughness: 0.45 }), xfmr: M('#8e98a3', { roughness: 0.5, metalness: 0.25 }), steel: M('#7b838c', { metalness: 0.5, roughness: 0.4 }),
+  conc: M('#c8c6c0', { roughness: 0.95 }), concOld: M('#b6b3ab', { roughness: 0.95 }), gravel: M('#bdb9b0', { roughness: 1 }), road: M('#c9bea6', { roughness: 1 }),
+  wood: M('#7a5a3a', { roughness: 0.9 }), panel: M('#d9dde2', { roughness: 0.5 }), black: M('#2b2f36'), porcelain: M('#6d4c41'),
+  fence: new THREE.MeshStandardMaterial({ color: '#8e979f', transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }),
+  mv: M('#d7263d'), dc: M('#f28c28'), lv: M('#2b6cb0'), com: M('#2f9e44'), gnd: M('#b87333', { metalness: 0.6, roughness: 0.35 }),
+  ohl: M('#5b6066', { metalness: 0.6 }), trench: M('#8d6e4f', { transparent: true, opacity: 0.55, depthWrite: false })
+};
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), M('#d8c8a5', { roughness: 1, transparent: true }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.GridHelper(400, 40, '#c2b393', '#cdbf9f'); grid.position.set(61, 0.001, -44); grid.material.transparent = true; grid.material.opacity = 0.35; scene.add(grid);
+
+// ---- object registry ----
+const OBJ = new Map(); const pickables = [];
+const ZONES = {};
+function reg(o, parts) {
+  o.parts = parts; o.disc = o.disc || 'spatial';
+  parts.forEach(m => { m.userData.id = o.id; m.userData.layer = m.userData.layer || o.layer; m.castShadow = m.userData.layer !== 'trench' && m.userData.layer !== 'fence';
+    m.receiveShadow = true; m.userData.base = m.material; pickables.push(m); scene.add(m); });
+  const bb = new THREE.Box3(); parts.forEach(p => bb.expandByObject(p)); o.bb = bb;
+  const c = bb.getCenter(new THREE.Vector3()); o.cx = c.x; o.cy = -c.z;
+  o.dims = { L: bb.max.x - bb.min.x, W: bb.max.z - bb.min.z, H: bb.max.y - bb.min.y, top: bb.max.y, bot: bb.min.y };
+  if (o.label) { const d = document.createElement('div'); d.className = 'lbl'; d.textContent = o.label; const lo = new CSS2DObject(d);
+    lo.position.set(c.x, bb.max.y + 2, c.z); scene.add(lo); o.lblObj = lo; }
+  OBJ.set(o.id, o); return o;
+}
+function box(x0, y0, x1, y1, z0, h, mat, layer) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, h, y1 - y0), mat);
+  m.position.copy(L((x0 + x1) / 2, (y0 + y1) / 2, z0 + h / 2)); if (layer) m.userData.layer = layer; return m;
+}
+function cyl(x, y, z0, h, r, mat, layer, r2) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r2 ?? r, h, 16), mat); m.position.copy(L(x, y, z0 + h / 2)); if (layer) m.userData.layer = layer; return m;
+}
+function tube(pts, r, mat, layer) {
+  const path = new THREE.CurvePath(); for (let i = 1; i < pts.length; i++) path.add(new THREE.LineCurve3(L(...pts[i - 1]), L(...pts[i])));
+  const m = new THREE.Mesh(new THREE.TubeGeometry(path, pts.length * 8, r, 8, false), mat); if (layer) m.userData.layer = layer; return m;
+}
+const plen = pts => pts.reduce((s, p, i) => i ? s + Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1], p[2] - pts[i - 1][2]) : 0, 0);
+
+// ---- shared reference text ----
+const SRC = {
+  e301: { t: 'E-301 Equipment Layout (60%)', f: 'Comstock 60% Electrical Drawings - 061826.pdf', p: 5 },
+  e200: { t: 'E-200 One-Line (60%)', f: 'Comstock 60% Electrical Drawings - 061826.pdf', p: 2 },
+  e302: { t: 'E-302 Grounding Plan', f: 'Comstock 60% Electrical Drawings - 061826.pdf', p: 6 },
+  e400: { t: 'E-400 Riser Pole P6', f: 'Comstock 60% Electrical Drawings - 061826.pdf', p: 8 },
+  e401: { t: 'E-401 Recloser Pole P5', f: 'Comstock 60% Electrical Drawings - 061826.pdf', p: 9 },
+  e403: { t: 'E-403 Conduit & Cable Schedule', f: 'Comstock 60% BOM.xlsx', p: 0 },
+  e404: { t: 'E-404 Aux Service Rack', f: 'Comstock 60% Electrical Drawings - 061826.pdf', p: 12 },
+  ga: { t: 'PNA sh.03 General Assembly + survey', f: 'FORTIFY GRID 2026-10-09 WITH POLE DETAIL.pdf', p: 3 },
+  pad: { t: 'PNA sh.04–06 Pad-mount pad & piers', f: 'FORTIFY GRID 2026-10-09 WITH POLE DETAIL.pdf', p: 4 },
+  str: { t: 'Structural IFC Rev 1', f: 'Constock Structural Drawings IFC Rev 1 12.05.2025.pdf', p: 2 },
+  fdn: { t: 'Foundation Plan S1-0', f: 'Comstock Foundation Plans S1-0 05072026.pdf', p: 1 },
+  fence: { t: 'Axial sh.07–08 Fencing details', f: 'IFC PHYSICAL PACKAGE VV.5 Comstock  - 8MW-20MWh BESS As-Built.pdf', p: 5 },
+  plot: { t: 'Axial E100 Plot Plan', f: 'IFC PHYSICAL PACKAGE VV.5 Comstock  - 8MW-20MWh BESS As-Built.pdf', p: 1 }
+};
+
+/* ============================================================ CIVIL ============================================================ */
+const FX = 122.667, FY = 87.458, YARD_T = 0.5, PAD_TOP = 0.5;
+reg({ id: 'YARD', name: 'Crushed-rock yard surfacing', type: 'Civil · surfacing', layer: 'yard', disc: 'civil', zone: 'perimeter',
+  props: { Area: `${r1(FX * FY)} sf (${(FX * FY / 43560).toFixed(3)} ac)`, Thickness: '6 in (assumed — confirm civil)', Material: 'Crushed rock / aggregate base' },
+  calc: o => [{ code: 'CIV-01', desc: 'Crushed-rock yard surfacing, 6 in', qty: Math.ceil(FX * FY * YARD_T / 27), unit: 'CY', by: 'Civil contractor', inst: 'Civil contractor' }],
+  scope: [['CC', 'Clear, grub, proof-roll and place 6 in compacted crushed-rock yard surfacing inside fence']],
+  src: ['ga'], dwgs: ['C-101', 'C-500'] }, [box(0, 0, FX, FY, -0.45, YARD_T, MAT.gravel)]);
+
+// fence: 8 ft chain link w/ barbed wire, vehicle gate 24'-1.5" + man gate 4' on north side (GA)
+(() => {
+  const parts = [], posts = [];
+  const runs = [[[0, 0], [FX, 0]], [[FX, 0], [FX, FY]], [[FX, FY], [101.125, FY]], [[73, FY], [0, FY]], [[0, FY], [0, 0]]];
+  let lf = 0;
+  runs.forEach(([a, b]) => { const len = Math.hypot(b[0] - a[0], b[1] - a[1]); lf += len; const n = Math.ceil(len / 10);
+    for (let i = 0; i <= n; i++) { const t = i / n; posts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const fab = new THREE.Mesh(new THREE.PlaneGeometry(len, 7), MAT.fence); fab.position.copy(L(mid[0], mid[1], 3.6)); fab.rotation.y = ang; fab.userData.layer = 'fence'; parts.push(fab);
+    parts.push(tube([[a[0], a[1], 7.1], [b[0], b[1], 7.1]], 0.08, MAT.steel, 'fence'));
+    [7.4, 7.7, 8.0].forEach(z => parts.push(tube([[a[0], a[1], z], [b[0], b[1], z]], 0.02, MAT.steel, 'fence'))); });
+  posts.forEach(([x, y]) => parts.push(cyl(x, y, 0, 8, 0.12, MAT.steel, 'fence')));
+  reg({ id: 'FENCE', name: 'Perimeter fence', type: 'Civil · fence', layer: 'fence', disc: 'civil', zone: 'perimeter',
+    props: { Size: `${FT(FX)} × ${FT(FY)} (GA sh.03)`, Height: '7 ft fabric + 1 ft 3-strand barbed (= 8 ft, verify vs Axial sh.07)', Posts: `${posts.length} @ ≤10 ft`, Status: 'Existing fence — extend per E-301 key note 1' },
+    calc: () => [{ code: 'CIV-10', desc: 'Chain-link fence 7 ft + barbed wire (incl. posts)', qty: Math.ceil(lf), unit: 'LF', by: 'Civil contractor', inst: 'Civil contractor' }],
+    scope: [['CC', 'Inspect existing fence; repair / extend chain-link fence, posts and barbed wire per fencing details']],
+    src: ['ga', 'fence'], dwgs: ['C-400', 'C-401'] }, parts);
+  const g = [box(73, FY - 0.15, 97.125, FY + 0.15, 0.2, 7.6, MAT.fence, 'fence'), tube([[73, FY, 7.8], [97.125, FY, 7.8]], 0.1, MAT.steel, 'fence'),
+    cyl(73, FY, 0, 8.5, 0.2, MAT.steel, 'fence'), cyl(97.125, FY, 0, 8.5, 0.2, MAT.steel, 'fence')];
+  reg({ id: 'GATE-V', name: 'Vehicle gate 24\'-1½" (double swing)', type: 'Civil · gate', layer: 'fence', disc: 'civil', zone: 'perimeter',
+    props: { Opening: '24\'-1½"', Location: 'North fence, x = 73\'–97\'-1½" (GA sh.03)' },
+    calc: () => [{ code: 'CIV-11', desc: 'Double-swing vehicle gate, 24 ft', qty: 1, unit: 'EA', by: 'Civil contractor', inst: 'Civil contractor' }],
+    scope: [['CC', 'Furnish and install 24 ft double-swing vehicle gate with lock provisions for AEP / fire access']], src: ['ga', 'fence'], dwgs: ['C-400', 'C-401'] }, g);
+  reg({ id: 'GATE-P', name: 'Personnel gate 4\'-0"', type: 'Civil · gate', layer: 'fence', disc: 'civil', zone: 'perimeter', props: { Opening: '4\'-0"' },
+    calc: () => [{ code: 'CIV-12', desc: 'Personnel gate, 4 ft', qty: 1, unit: 'EA', by: 'Civil contractor', inst: 'Civil contractor' }],
+    scope: [['CC', 'Furnish and install 4 ft personnel gate with panic hardware (egress)']], src: ['ga'], dwgs: ['C-400', 'C-401'] },
+    [box(97.125, FY - 0.15, 101.125, FY + 0.15, 0.2, 7.6, MAT.fence, 'fence'), cyl(101.125, FY, 0, 8.5, 0.2, MAT.steel, 'fence')]);
+})();
+reg({ id: 'ROAD', name: 'Access road (existing 20 ft gravel)', type: 'Civil · road', layer: 'road', disc: 'civil', zone: 'perimeter',
+  props: { Width: '20 ft (E-301)', Note: 'Existing — connects to Private Road 4 / FM Hwy 163. Fire-apparatus access to be confirmed with AHJ.' },
+  calc: () => [{ code: 'CIV-20', desc: 'Access road maintenance / re-grade (existing)', qty: 1, unit: 'LS', by: 'Civil contractor', inst: 'Civil contractor' }],
+  scope: [['CC', 'Re-grade and top-dress existing 20 ft gravel access road; maintain fire-apparatus access']], src: ['e301', 'plot'], dwgs: ['C-300'] },
+  [box(75, FY + 0.5, 95, FY + 70, -0.3, 0.32, MAT.road)]);
+
+/* ============================================================ FOUNDATIONS ============================================================ */
+const BESS_X = { 'BESS-4': 9.083, 'BESS-3': 26.333, 'UNUSED-B': 43.667, 'BESS-2': 61.0, 'BESS-1': 78.333 };
+const BY0 = 9.0, BY1 = 30.875; // 21'-10½" pads, 9'-0" off south fence (E-301)
+const SKID_X = { 'SKID-2': 28.333, 'UNUSED-S': 45.667, 'SKID-1': 63.0 };
+const SY0 = 39.667, SY1 = 74.833; // 35'-2" pads
+function foundation(id, name, x0, y0, x1, y1, opt) {
+  const t = 1.5, z0 = PAD_TOP - t, cy = (x1 - x0) * (y1 - y0) * t / 27;
+  return reg({ id, name, type: 'Structural · foundation', layer: 'found', disc: 'civil', zone: opt.zone,
+    props: { Footprint: `${FT(x1 - x0)} × ${FT(y1 - y0)}`, 'Top of concrete': '+6 in above finished grade (assumed)', Thickness: '18 in (assumed — verify Structural IFC Rev 1)', Status: opt.status, Concrete: `${r1(cy)} CY` },
+    calc: () => opt.existing ? [{ code: 'STR-05', desc: 'Inspect / survey existing foundation, anchor retrofit', qty: 1, unit: 'EA', by: 'Civil contractor', inst: 'Civil contractor' }]
+      : [{ code: 'STR-01', desc: 'Cast-in-place concrete foundation (4,000 psi) incl. rebar & forms', qty: r1(cy), unit: 'CY', by: 'Civil contractor', inst: 'Civil contractor' }],
+    scope: [['CC', opt.existing ? 'Survey existing foundation, verify level and anchor locations vs OEM template; install anchors per Structural IFC Rev 1' :
+      'Excavate, form, place rebar and pour new foundation; set anchor bolts to OEM template; cure and test cylinders']].concat(opt.ext ? [['CC', 'Construct foundation extension per E-301 key note 2 / structural drawings']] : []),
+    src: ['e301', 'str', 'fdn'], dwgs: opt.dwgs }, [box(x0, y0, x1, y1, z0, t, opt.existing ? MAT.concOld : MAT.conc)]);
+}
+Object.entries(BESS_X).forEach(([k, x]) => foundation('FDN-' + k, k === 'UNUSED-B' ? 'Existing BESS foundation (not used)' : `${k} foundation`, x, BY0, x + 10, BY1,
+  { zone: 'bess', existing: k !== 'BESS-1', status: k === 'BESS-1' ? 'NEW foundation (E-301)' : k === 'UNUSED-B' ? 'Existing — not used' : 'Existing foundation — reuse', dwgs: ['S-100', 'S-201'] }));
+Object.entries(SKID_X).forEach(([k, x]) => foundation('FDN-' + k, k === 'UNUSED-S' ? 'Existing skid foundation (not used)' : `PCS ${k} foundation`, x, SY0, x + 6, SY1,
+  { zone: 'pcs', existing: true, ext: k !== 'UNUSED-S', status: k === 'UNUSED-S' ? 'Existing — not used' : 'Existing — extend per E-301 note 2', dwgs: ['S-100', 'S-202'] }));
+
+/* ============================================================ BESS ============================================================ */
+const bessSpec = { Make: 'Gotion', Model: 'ESD1331-05P5015', Energy: '5.015 MWh (DC nameplate)', 'Container': '20 ft · 6058 × 2438 × 2896 mm', Cooling: 'Liquid, integrated HVAC', BMS: 'Integrated', Weight: 'TBD — per Gotion VDR', Certs: 'UL 9540 / 9540A (confirm)' };
+const pcsFor = { 'BESS-1': 'INV-1', 'BESS-2': 'INV-2', 'BESS-3': 'INV-3', 'BESS-4': 'INV-4' };
+['BESS-1', 'BESS-2', 'BESS-3', 'BESS-4'].forEach((k, i) => {
+  const x0 = BESS_X[k] + 1, y0 = BY0 + 0.99, x1 = x0 + 7.99, y1 = y0 + 19.88, z = PAD_TOP, h = 9.5;
+  const parts = [box(x0, y0, x1, y1, z, h, MAT.white)];
+  // door seams on east and west faces, accent stripe, HVAC on north end, roof edge
+  for (let j = 1; j < 6; j++) { const yy = y0 + j * (y1 - y0) / 6; parts.push(box(x0 - 0.04, yy - 0.03, x0, yy + 0.03, z + 0.4, h - 0.8, MAT.seam), box(x1, yy - 0.03, x1 + 0.04, yy + 0.03, z + 0.4, h - 0.8, MAT.seam)); }
+  parts.push(box(x0 - 0.05, y0 + 0.2, x0, y1 - 0.2, z + h - 1.1, 0.35, MAT.blue), box(x1, y0 + 0.2, x1 + 0.05, y1 - 0.2, z + h - 1.1, 0.35, MAT.blue));
+  parts.push(box(x0 + 0.8, y1, x1 - 0.8, y1 + 0.9, z + 1.2, 5.5, MAT.hvac), box(x0, y0, x1, y1, z + h, 0.15, MAT.hvac));
+  reg({ id: k, name: `${k} — Battery container`, label: k, type: 'BESS container', layer: 'equip', sys: 'BESS', disc: 'electrical', zone: 'bess',
+    props: { ...bessSpec, 'Fed by': `${pcsFor[k]} (DC cable P0${3 + i})`, 'Aux feed': `AUX${i + 1}.1 from DP (P${12 + i})`, Foundation: `FDN-${k}` },
+    calc: () => [{ code: '202', desc: 'Gotion ESD1331-05P5015 BESS container, 5.015 MWh', qty: 1, unit: 'EA', by: 'FortifyGrid (owner-furnished)', inst: 'Electrical contractor' }],
+    scope: [['EC', `Receive, offload (crane) and set ${k}; anchor to foundation; bond to ground grid`], ['EC', `Terminate DC (P0${3 + i}), aux (P${12 + i}) and comms (C0${i + 1}); torque-mark and IR test`], ['FG', `Furnish ${k} container; OEM commissioning support`]],
+    src: ['e301', 'e200'], dwgs: ['E-101', 'E-200', 'E-900'] }, parts);
+});
+
+/* ============================================================ PCS / MVT SKIDS ============================================================ */
+const invSpec = { Make: 'Dynapower', Model: 'CPS-2500 Gen5 (60% BOM item B01)', Rating: '2304 kVA, 690 VAC', 'DC input': '1500 VDC max', Comms: 'Modbus TCP → EMS', Note: 'PCS line-up FREEZE pending — EMS contract / Sineng GA show 2× Sineng EH-4200 integrated skids' };
+const skids = [{ sk: 'SKID-1', x: 63, tr: 'TR-1', top: 'INV-1', bot: 'INV-2' }, { sk: 'SKID-2', x: 28.333, tr: 'TR-2', top: 'INV-4', bot: 'INV-3' }];
+skids.forEach(s => {
+  const x0 = s.x, x1 = s.x + 6;
+  reg({ id: s.sk, name: `PCS ${s.sk} steel base`, type: 'Skid frame', layer: 'equip', sys: 'MV', disc: 'electrical', zone: 'pcs',
+    props: { Size: `6'-0" × 35'-2" (E-301)`, Contents: `${s.top}, ${s.tr}, ${s.bot}` }, calc: () => [], scope: [['EC', `Set ${s.sk} base on foundation; level, shim and anchor`]],
+    src: ['e301'], dwgs: ['E-101'] }, [box(x0 + 0.1, SY0 + 0.3, x1 - 0.1, SY1 - 0.3, PAD_TOP, 0.6, MAT.steel)]);
+  [[s.top, SY1 - 9.3], [s.bot, SY0 + 1.3]].forEach(([id, y]) => {
+    const n = +id.slice(-1), parts = [box(x0 + 0.25, y, x1 - 0.25, y + 8, PAD_TOP + 0.6, 7.4, MAT.inv)];
+    parts.push(box(x0 + 0.2, y + 0.4, x0 + 0.25, y + 7.6, PAD_TOP + 1.2, 5.6, MAT.seam), box(x0 + 0.25, y, x1 - 0.25, y + 8, PAD_TOP + 8.0, 0.12, MAT.hvac));
+    for (let j = 0; j < 3; j++) parts.push(box(x0 + 0.6 + j * 1.6, y + 3, x0 + 1.6 + j * 1.6, y + 5, PAD_TOP + 8.12, 0.8, MAT.hvac));
+    reg({ id, name: `${id} — PCS inverter`, label: id, type: 'Power conversion system', layer: 'equip', sys: 'DC', disc: 'electrical', zone: 'pcs',
+      props: { ...invSpec, Skid: s.sk, 'DC from': `BESS-${n} (P0${2 + n})`, 'AC to': s.tr },
+      calc: () => [{ code: 'B01', desc: 'Dynapower CPS-2500 Gen5 PCS, 2304 kVA', qty: 1, unit: 'EA', by: 'FortifyGrid (owner-furnished)', inst: 'Electrical contractor' }],
+      scope: [['EC', `Set and anchor ${id}; terminate DC P0${2 + n}, AC bus to ${s.tr}, comms C0${4 + n}`], ['FG', `Furnish ${id}; OEM start-up`]],
+      src: ['e301', 'e200'], dwgs: ['E-101', 'E-200', 'E-900'] }, parts);
+  });
+  const ty0 = SY0 + 12.5, ty1 = ty0 + 10, parts = [box(x0 + 0.4, ty0, x1 - 0.4, ty1, PAD_TOP + 0.6, 7.2, MAT.xfmr)];
+  for (let j = 0; j < 7; j++) parts.push(box(x1 - 0.4, ty0 + 1 + j * 1.2, x1 + 1.6, ty0 + 1.4 + j * 1.2, PAD_TOP + 1.4, 5.4, MAT.xfmr));
+  [-1.4, 0, 1.4].forEach(d => parts.push(cyl(x0 + 3, (ty0 + ty1) / 2 + d * 1.6, PAD_TOP + 7.8, 1.6, 0.18, MAT.porcelain)));
+  reg({ id: s.tr, name: `${s.tr} — MV transformer`, label: s.tr, type: 'MV step-up transformer', layer: 'equip', sys: 'MV', disc: 'electrical', zone: 'pcs',
+    props: { Make: 'TMC (60% BOM item B02)', Rating: '4600 kVA (2 × 2750 kVA LV)', Voltage: '12.47 kV – 690 V / 690 V', 'Vector group': 'YNd1d1', Impedance: '7 % Z', Protection: 'Bay-O-Net fuse + CLF, 4-position LBOR', Skid: s.sk },
+    calc: () => [{ code: 'B02', desc: 'TMC 4600 kVA 12.47/0.69-0.69 kV 3-winding MVT skid', qty: 1, unit: 'EA', by: 'FortifyGrid (owner-furnished)', inst: 'Electrical contractor' }],
+    scope: [['EC', `Set ${s.tr}; terminate MV elbows (P01/P02 loop); oil / ratio / IR tests; bond tank to grid`]],
+    src: ['e301', 'e200'], dwgs: ['E-101', 'E-200', 'E-900'] }, parts);
+});
+
+/* ============================================================ AUX RACK + T1 ============================================================ */
+const RX0 = 97.5, RX1 = 98.5, RY0 = 34.0, RY1 = 45.5;
+reg({ id: 'RACK', name: 'Aux power switchrack (Unistrut)', label: 'Aux rack', type: 'Steel rack', layer: 'equip', sys: 'LV', disc: 'electrical', zone: 'aux',
+  props: { Size: `${FT(RY1 - RY0)} long × 7 ft high`, Panels: 'MB, DP, MPC, UPS, EMS, Telecom', Footings: '2 × drilled pier (assumed)' },
+  calc: () => [{ code: 'J01', desc: 'Unistrut structure for MB, DP, MPC, UPS, EMS & telecom panels', qty: 1, unit: 'EA', by: 'Electrical contractor', inst: 'Electrical contractor' }],
+  scope: [['CC', 'Drill and pour rack post footings'], ['EC', 'Erect Unistrut switchrack; mount panels']], src: ['e404', 'ga'], dwgs: ['E-600', 'S-204'] },
+  [cyl(98, RY0 + 0.3, 0, 7.5, 0.15, MAT.steel), cyl(98, RY1 - 0.3, 0, 7.5, 0.15, MAT.steel), box(RX0 + 0.35, RY0, RX1 - 0.35, RY1, 6.8, 0.2, MAT.steel), box(RX0 + 0.35, RY0, RX1 - 0.35, RY1, 1.2, 0.2, MAT.steel)]);
+[['MB', 'Main breaker 480 V 400 A 65 kAIC', 'C01'], ['DP', 'Distribution panel 480/277 V 400 A MLO', 'C02'], ['MPC', 'Mini power center 15 kVA 480–120/240 V', 'C03'],
+ ['UPS', 'DC UPS 24 VDC MicroCab 1500 (NEMA 3RX)', 'C04'], ['EMS', 'EMS panel NEMA 3R', 'C05'], ['TEL', 'Telecom / fiber panel NEMA 3R', 'C06']].forEach(([id, d, code], i) => {
+  const y0 = RY0 + 0.3 + i * 1.85;
+  reg({ id, name: `${id} — ${d}`, label: i % 2 ? null : id, type: 'Aux panel', layer: 'equip', sys: id === 'EMS' || id === 'TEL' ? 'COM' : 'LV', disc: 'electrical', zone: 'aux',
+    props: { Description: d, 'BOM ref': code, Mount: 'Switchrack, east face' },
+    calc: () => [{ code, desc: d, qty: 1, unit: 'EA', by: 'AD Stanley', inst: 'Electrical contractor' }],
+    scope: [['EC', `Mount and wire ${id}; label per arc-flash study`]], src: ['e404', 'e200'], dwgs: ['E-600', 'E-200'] },
+    [box(RX1 - 0.3, y0, RX1 + 0.6, y0 + 1.6, 2.2, 3.6, id === 'EMS' || id === 'TEL' ? MAT.panel : MAT.inv)]);
+});
+const T1 = toLocal(SV.T1);
+reg({ id: 'FDN-T1', name: 'T1 pad + 4 piers', type: 'Structural · pad', layer: 'found', disc: 'civil', zone: 'aux',
+  props: { Pad: '96" × 89" × 12" (PNA sh.04)', Piers: '4 × Ø12" × 8\'-0" deep, 4-#4 vert.', Concrete: `${r1(8 * 7.417 * 1 / 27 + 4 * Math.PI * 0.25 * 8 / 27)} CY`, Survey: 'T1 point, PNA point table' },
+  calc: () => [{ code: 'STR-02', desc: 'Pad-mount transformer pad 96×89×12 in + 4 piers Ø12 in × 8 ft', qty: r1(8 * 7.417 / 27 + 4 * Math.PI * 0.25 * 8 / 27), unit: 'CY', by: 'Civil contractor', inst: 'Civil contractor' }],
+  scope: [['CC', 'Drill 4 piers, pour 96×89×12 in pad per AEP standard; leave conduit window for P08/P09']], src: ['pad', 'ga'], dwgs: ['S-203'] },
+  [box(T1.x - 4, T1.y - 3.71, T1.x + 4, T1.y + 3.71, -0.5, 1.0, MAT.conc), ...[[-3, -2.7], [3, -2.7], [-3, 2.7], [3, 2.7]].map(([dx, dy]) => cyl(T1.x + dx, T1.y + dy, -8.5, 8, 0.5, MAT.conc, 'pier'))]);
+reg({ id: 'T1', name: 'T1 — AEP aux pad-mount transformer', label: 'T1 aux xfmr', type: 'Pad-mount transformer', layer: 'equip', sys: 'LV', disc: 'electrical', zone: 'aux',
+  props: { Owner: 'AEP Texas (AEP-furnished)', Rating: '300 kVA, 12.47 kV – 480/277 V', Survey: `N ${SV.T1[0].toFixed(2)}, E ${SV.T1[1].toFixed(2)}`, Feed: 'P08 from pole line (AEP conductors)', Secondary: 'P09 → MB' },
+  calc: () => [{ code: 'AEP-T1', desc: 'AEP 300 kVA pad-mount transformer (by AEP)', qty: 1, unit: 'EA', by: 'AEP', inst: 'AEP' }],
+  scope: [['AEP', 'Furnish, set and terminate pad-mount aux transformer and revenue meter'], ['EC', 'Provide P08/P09 conduits stubbed into pad window']], src: ['ga', 'e200'], dwgs: ['E-200', 'S-203'] },
+  [box(T1.x - 2.6, T1.y - 2.6, T1.x + 2.6, T1.y + 2.6, 0.5, 5.25, M('#6f8f6a'))]);
+
+/* ============================================================ POLE LINE (surveyed) ============================================================ */
+const POLES = {
+  P6: ['BESS feeder / cable riser pole', 'Riser: 5 in RAC, terminations, 3 × surge arresters (A02)', 'e400', [['A02', 'Surge arrester 10 kV / 8.4 kV MCOV (Eaton)', 3, 'EA', 'AD Stanley']]],
+  P5: ['Recloser pole (customer)', 'G&W 15 kV 630 A recloser + SEL-651R2 control (A03/A04)', 'e401', [['A03', 'G&W 3-ph recloser 15 kV 110 kV BIL 630 A', 1, 'EA', 'FortifyGrid'], ['A04', 'SEL-651R2 recloser control', 1, 'EA', 'FortifyGrid']]],
+  P4: ['AEP primary disconnect pole', 'S&C gang-operated solid-blade 15.5 kV 900 A (A01) — visible open point', 'ga', [['A01', 'S&C gang-operated disconnect 15.5 kV 900 A', 1, 'EA', 'AEP']]],
+  P3: ['AEP metering pole', 'ERCOT EPS revenue metering CT/PT (AEP)', 'ga', []],
+  P2: ['AEP recloser pole', 'AEP-owned utility recloser', 'ga', []],
+  P1: ['AEP aux transformer feeder pole', 'Fused tap → P08 UG to T1', 'ga', []]
+};
+const PL = {}; Object.keys(POLES).forEach(k => PL[k] = toLocal(SV[k]));
+const lineDir = new THREE.Vector2(PL.P1.x - PL.P6.x, PL.P1.y - PL.P6.y).normalize();
+const perp = new THREE.Vector2(-lineDir.y, lineDir.x);
+const ARM_Z = 36;
+Object.entries(POLES).forEach(([k, [role, equip, src, bom]]) => {
+  const p = PL[k], parts = [cyl(p.x, p.y, -6.5, 45, 0.42, MAT.wood, 'pole', 0.6)];
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(10, 0.33, 0.33), MAT.wood); arm.position.copy(L(p.x, p.y, ARM_Z)); arm.rotation.y = Math.atan2(perp.y, perp.x); arm.userData.layer = 'pole'; parts.push(arm);
+  [-4, 0, 4].forEach(d => parts.push(cyl(p.x + perp.x * d, p.y + perp.y * d, ARM_Z + 0.2, 0.9, 0.16, MAT.porcelain, 'pole')));
+  if (k === 'P5' || k === 'P2') parts.push(box(p.x + 0.5, p.y - 1.2, p.x + 2.5, p.y + 1.2, 28, 3.2, MAT.steel, 'pole'));
+  if (k === 'P5') parts.push(box(p.x - 1.6, p.y - 0.8, p.x - 0.5, p.y + 0.8, 6, 3, MAT.panel, 'pole'));
+  if (k === 'P4') parts.push(box(p.x - 0.4, p.y - 4.2, p.x + 0.4, p.y + 4.2, 32, 0.5, MAT.steel, 'pole'), cyl(p.x + 0.7, p.y, 0, 32, 0.06, MAT.steel, 'pole'));
+  if (k === 'P3') parts.push(box(p.x + 0.5, p.y - 1.5, p.x + 1.8, p.y + 1.5, 31, 1.6, MAT.xfmr, 'pole'), box(p.x - 1.4, p.y - 0.7, p.x - 0.5, p.y + 0.7, 5, 2.5, MAT.panel, 'pole'));
+  if (k === 'P6') parts.push(cyl(p.x + 0.65, p.y, -3, 34, 0.22, MAT.steel, 'pole'));
+  const sp = toSP(p.x, p.y);
+  reg({ id: k, name: `Pole ${k} — ${role}`, label: k, type: 'Wood pole 45 ft Class 2 SYP', layer: 'pole', sys: 'MV', disc: 'electrical', zone: 'poi',
+    props: { Role: role, Equipment: equip, Pole: '45 ft Class 2 SYP CCA, 6.5 ft embed (≈38.5 ft AG)', Crossarm: '10 ft @ 36 ft AG (typ.)', 'Survey N / E': `${SV[k][0].toFixed(3)} / ${SV[k][1].toFixed(3)}`, 'Lat / Long': `${sp.lat.toFixed(6)}, ${sp.lon.toFixed(6)}`, Owner: ['P1', 'P2', 'P3', 'P4'].includes(k) ? 'AEP Texas' : 'Customer (FortifyGrid)' },
+    calc: () => [{ code: 'PL-1', desc: 'Southern pine pole 45 ft Class 2 CCA + crossarm & insulators', qty: 1, unit: 'EA', by: ['P1', 'P2', 'P3', 'P4'].includes(k) ? 'AEP' : 'Electrical contractor', inst: ['P1', 'P2', 'P3', 'P4'].includes(k) ? 'AEP' : 'Electrical contractor' },
+      ...bom.map(([code, desc, qty, unit, by]) => ({ code, desc, qty, unit, by, inst: by === 'AEP' ? 'AEP' : 'Electrical contractor' }))],
+    scope: ['P1', 'P2', 'P3', 'P4'].includes(k) ? [['AEP', `Set pole ${k} and ${role.toLowerCase()} equipment`]] : [['EC', `Set pole ${k} (6.5 ft embed), framing, guying; install ${equip}`], ['EC', `Ground pole ${k}; bond equipment`]],
+    src: [src, 'ga'], dwgs: k === 'P6' ? ['E-400', 'S-300'] : k === 'P5' ? ['E-401', 'S-300'] : ['E-402', 'E-403'] }, parts);
+});
+(() => { // 12.47 kV OH line P0(off-site)…P6, 3 × 477 AAC with sag
+  const order = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'], pts = order.map(k => PL[k]);
+  const p0 = { x: PL.P1.x + (PL.P1.x - PL.P2.x) * 2, y: PL.P1.y + (PL.P1.y - PL.P2.y) * 2 }; pts.unshift(p0);
+  const parts = []; let len = 0;
+  [-4, 0, 4].forEach(d => { for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], seg = [];
+    for (let t = 0; t <= 8; t++) { const u = t / 8; seg.push([a.x + (b.x - a.x) * u + perp.x * d, a.y + (b.y - a.y) * u + perp.y * d, ARM_Z + 1.1 - 1.4 * 4 * u * (1 - u)]); }
+    parts.push(tube(seg, 0.07, MAT.ohl, 'ohl')); if (d === 0) len += Math.hypot(b.x - a.x, b.y - a.y); } });
+  reg({ id: 'OHL', name: '12.47 kV overhead line (3 × 477 AAC)', type: 'Overhead conductor', layer: 'ohl', sys: 'MV', disc: 'electrical', zone: 'poi',
+    props: { Conductor: '477 MCM AAC "Cosmos" + 1/0 AAC neutral', Spans: `${pts.length - 1} (P0 off-site → P6)`, 'Route length': `${r1(len)} ft`, Spacing: '≈20 ft spans (GA)' },
+    calc: () => [{ code: 'PL-14', desc: '477 MCM AAC conductor', qty: Math.ceil(len * 3 * 1.05), unit: 'LF', by: 'Electrical contractor', inst: 'Electrical contractor' }],
+    scope: [['EC', 'String, sag and dead-end customer-side 477 AAC spans P4–P6'], ['AEP', 'String utility spans P0–P4']], src: ['ga', 'e200'], dwgs: ['E-200', 'E-402', 'E-403'] }, parts);
+})();
+reg({ id: 'LIGHT', name: 'Yard light pole w/ 2 × 400 W LED floods', label: null, type: 'Site lighting', layer: 'light', sys: 'LV', disc: 'civil', zone: 'aux',
+  props: { Pole: '20 ft × 4.0 in OD steel (BOM J02)', Fixtures: '2 × 400 W LED (K01)', Location: 'ASSUMED near aux rack — not dimensioned in set', Footing: 'Ø24 in × 6 ft (assumed)' },
+  calc: () => [{ code: 'J02', desc: 'Light pole 20 ft steel', qty: 1, unit: 'EA', by: 'Electrical contractor', inst: 'Electrical contractor' }, { code: 'K01', desc: 'LED floodlight 400 W', qty: 2, unit: 'EA', by: 'Electrical contractor', inst: 'Electrical contractor' },
+    { code: 'STR-03', desc: 'Light-pole footing Ø24 in × 6 ft', qty: r1(Math.PI * 1 * 6 / 27), unit: 'CY', by: 'Civil contractor', inst: 'Civil contractor' }],
+  scope: [['CC', 'Light-pole footing'], ['EC', 'Erect light pole, fixtures, photocell, circuit from MPC']], src: ['e200'], dwgs: ['E-800', 'S-204'] },
+  [cyl(103, 47, -6, 6, 1, MAT.conc, 'pier'), cyl(103, 47, 0, 20, 0.17, MAT.steel), box(102.2, 46.4, 103.8, 47.6, 19.6, 0.8, MAT.black)]);
+
+/* ============================================================ CABLES (routes → computed length vs E-403) ============================================================ */
+const UG = -3.0, AG = 6.0;
+const sx = id => OBJ.get(id);
+const B = k => ({ x: BESS_X[k] + 5, y: BY1 - 1 });
+const cables = [
+  ['P01', 'MV', 'P6 → TR-1', [[PL.P6.x, PL.P6.y, 2], [PL.P6.x, PL.P6.y, UG], [PL.P6.x, 47.5, UG], [72.5, 47.5, UG], [72.5, 57, UG], [68.5, 57, UG], [68.5, 57, 1]], { n: 3, size: '750 kcmil Cu 15 kV EPR + 2/0 gnd', sched: 132, bom: [['D01', '15 kV 1/C 750 kcmil Cu EPR MV-105', 3], ['D02', '15 kV 1/C 2/0 Cu ground', 1], ['H01', 'PVC Sch 40 conduit 5 in', 1]] }],
+  ['P02', 'MV', 'TR-1 → TR-2 (loop)', [[66, 61, 1], [66, 61, UG], [66, 77.5, UG], [31.3, 77.5, UG], [31.3, 61, UG], [31.3, 61, 1]], { n: 3, size: '750 kcmil Cu 15 kV EPR + 2/0 gnd', sched: 66, bom: [['D01', '15 kV 1/C 750 kcmil Cu EPR MV-105', 3], ['D02', '15 kV 1/C 2/0 Cu ground', 1], ['H01', 'PVC Sch 40 conduit 5 in', 1]] }],
+  ['P03', 'DC', 'INV-1 → BESS-1', [[68, 70, 1], [68, 70, UG], [74.5, 70, UG], [74.5, 35, UG], [B('BESS-1').x, 35, UG], [B('BESS-1').x, B('BESS-1').y, UG], [B('BESS-1').x, B('BESS-1').y, 1]], { n: 16, size: '1/C 500 kcmil DLO 2 kV', bom: [['E01', '1/C 500 kcmil DLO 2000 V DC', 16], ['H02', 'PVC Sch 40 conduit 4 in', 4]] }],
+  ['P04', 'DC', 'INV-2 → BESS-2', [[66, 43, 1], [66, 43, UG], [66, 30, UG], [66, 30, 1]], { n: 16, size: '1/C 500 kcmil DLO 2 kV', bom: [['E01', '1/C 500 kcmil DLO 2000 V DC', 16], ['H02', 'PVC Sch 40 conduit 4 in', 4]] }],
+  ['P05', 'DC', 'INV-3 → BESS-3', [[31.3, 43, 1], [31.3, 43, UG], [31.3, 30, UG], [31.3, 30, 1]], { n: 16, size: '1/C 500 kcmil DLO 2 kV', bom: [['E01', '1/C 500 kcmil DLO 2000 V DC', 16], ['H02', 'PVC Sch 40 conduit 4 in', 4]] }],
+  ['P06', 'DC', 'INV-4 → BESS-4', [[29.3, 70, 1], [29.3, 70, UG], [23.5, 70, UG], [23.5, 35, UG], [B('BESS-4').x, 35, UG], [B('BESS-4').x, B('BESS-4').y, UG], [B('BESS-4').x, B('BESS-4').y, 1]], { n: 16, size: '1/C 500 kcmil DLO 2 kV', bom: [['E01', '1/C 500 kcmil DLO 2000 V DC', 16], ['H02', 'PVC Sch 40 conduit 4 in', 4]] }],
+  ['P08', 'MV', 'Pole line → T1 (AEP)', [[PL.P5.x, PL.P5.y, 1], [PL.P5.x, PL.P5.y, UG], [PL.P5.x, T1.y + 1, UG], [T1.x + 2.5, T1.y + 1, UG], [T1.x + 2.5, T1.y + 1, 0.5]], { n: 0, size: 'AEP conductors (4 in conduit by EC)', bom: [['H02', 'PVC Sch 40 conduit 4 in', 1]] }],
+  ['P09', 'LV', 'T1 → MB', [[T1.x - 2.5, T1.y, 1], [T1.x - 2.5, T1.y, UG], [RX1 + 0.2, T1.y, UG], [RX1 + 0.2, 44.3, UG], [RX1 + 0.2, 44.3, 2.5]], { n: 6, size: '1/C 250 kcmil XHHW-2 + #2 gnd', sched: 360, bom: [['F01', '600 V 1/C 250 kcmil Cu XHHW-2', 6], ['F03', '600 V 1/C #2 Cu ground', 2], ['H03', 'PVC Sch 40 conduit 3 in', 2]] }]
+];
+['BESS-1', 'BESS-2', 'BESS-3', 'BESS-4'].forEach((k, i) => { const b = B(k), off = i * 0.4;
+  cables.push([`P1${2 + i}`, 'LV', `DP → AUX${i + 1}.1 (${k})`, [[RX1 + 0.2, 40.5, 2.5], [RX1 + 0.2, 40.5, UG + 0.5], [RX1 + 0.2, 33 - off, UG + 0.5], [b.x - 2, 33 - off, UG + 0.5], [b.x - 2, b.y, UG + 0.5], [b.x - 2, b.y, 1]],
+    { n: 3, size: '1/C #4 XHHW-2 + #8 gnd', bom: [['F06', '600 V 1/C #4 Cu XHHW-2', 3], ['F07', '600 V 1/C #8 Cu ground', 1], ['H05', 'PVC Sch 40 conduit 1-1/2 in', 1]] }]);
+  cables.push([`C0${1 + i}`, 'COM', `EMS → ${k}`, [[RX1 + 0.2, 37, 3], [RX1 + 0.2, 37, UG + 1], [RX1 + 0.2, 32 - off, UG + 1], [b.x + 2, 32 - off, UG + 1], [b.x + 2, b.y, UG + 1], [b.x + 2, b.y, 1]],
+    { n: 1, size: 'Cat 5e', bom: [['G01', 'Cat 5e communication cable', 1], ['H-1', 'PVC Sch 40 conduit 1 in', 1]] }]);
+});
+cables.push(['C11', 'COM', 'EMS → P5 recloser control (SEL)', [[RX1 + 0.2, 38, 3], [RX1 + 0.2, 38, UG + 1], [RX1 + 0.2, 52, UG + 1], [PL.P5.x - 1, 52, UG + 1], [PL.P5.x - 1, PL.P5.y, UG + 1], [PL.P5.x - 1, PL.P5.y, 6]], { n: 1, size: 'Cat 5e', bom: [['G01', 'Cat 5e communication cable', 1], ['H-1', 'PVC Sch 40 conduit 1 in', 1]] }]);
+const CR = { MV: [0.28, MAT.mv, 'cable-mv'], DC: [0.34, MAT.dc, 'cable-dc'], LV: [0.14, MAT.lv, 'cable-lv'], COM: [0.09, MAT.com, 'cable-com'] };
+const SYSN = { MV: '12.47 kV MV', DC: '1500 VDC', LV: '480/277 V / 120 V', COM: 'Comms' };
+cables.forEach(([id, sys, run, pts, o]) => {
+  const len = plen(pts), [rad, mat, layer] = CR[sys], qty = Math.ceil(len * 1.10);
+  reg({ id, name: `${id} — ${run}`, type: `Cable · ${SYSN[sys]}`, layer, sys, disc: 'electrical', zone: 'cable', cable: { pts, len, sys },
+    props: { Circuit: run, Conductors: `${o.n ? o.n + ' × ' : ''}${o.size}`, 'Route length (model)': `${r1(len)} ft`, 'BOM qty basis': 'route + 10 % slack × conductors', 'E-403 ref': id, Installation: pts.some(p => p[2] < 0) ? `UG conduit, ${-UG} ft to top of duct (assumed)` : 'Above ground' },
+    calc: () => o.bom.map(([code, desc, mult]) => ({ code, desc, qty: qty * mult, unit: 'FT', by: code.startsWith('H') ? 'Electrical contractor' : 'AD Stanley', inst: 'Electrical contractor' })),
+    scope: [['EC', `Install ${id} raceway (${r1(len)} ft route), pull ${o.size}; terminate both ends; IR / VLF test as applicable`]],
+    src: ['e403', 'e200', 'e301'], dwgs: ['E-200', 'E-500', 'E-501', 'E-502'] }, [tube(pts, rad, mat, layer)]);
+});
+
+/* trenches (civil) built from UG cable routes; 12 in × 48 in per GA sh.03 */
+(() => {
+  const segs = new Map();
+  cables.forEach(([id, , , pts]) => { for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i]; if (a[2] >= 0 || b[2] >= 0) continue;
+    const key = [a[0], a[1], b[0], b[1]].map(v => Math.round(v)).join(','); if (!segs.has(key)) segs.set(key, [a, b]); } });
+  const parts = []; let lf = 0;
+  segs.forEach(([a, b]) => { const len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (len < 0.5) return; lf += len;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(len + 1, 4, 1.2), MAT.trench); m.position.copy(L((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, -2)); m.rotation.y = Math.atan2(b[1] - a[1], b[0] - a[0]); m.userData.layer = 'trench'; parts.push(m); });
+  reg({ id: 'TRENCH', name: 'Cable trenches (UG duct routes)', type: 'Civil · trench', layer: 'trench', disc: 'civil', zone: 'cable',
+    props: { Section: '12 in wide × 48 in deep (GA sh.03 Trench 1/2)', 'Total length (model)': `${r1(lf)} ft`, Excavation: `${r1(lf * 1 * 4 / 27)} CY`, Note: 'Routes are schematic from E-301/E-403 — trench plan not yet issued' },
+    calc: () => [{ code: 'CIV-30', desc: 'Trench 12 × 48 in, excavate / sand bed / backfill & compact', qty: Math.ceil(lf * 1.05), unit: 'LF', by: 'Civil contractor', inst: 'Civil contractor' },
+      { code: 'CIV-31', desc: 'Trench excavation volume', qty: Math.ceil(lf * 4 / 27), unit: 'CY', by: 'Civil contractor', inst: 'Civil contractor' }],
+    scope: [['CC', 'Excavate trenches 12 × 48 in, sand bedding, warning tape, backfill and compact to 95 % SPD'], ['EC', 'Coordinate conduit placement and inspection before backfill']],
+    src: ['ga', 'e301'], dwgs: ['C-600', 'E-500', 'E-502'] }, parts);
+})();
+
+/* grounding: 4/0 bare Cu loop + cross ties, 22 rods (E-302 count) — geometry schematic */
+(() => {
+  const z = -2.5, loop = [[4, 5], [104, 5], [104, 79], [4, 79], [4, 5]], ties = [[[4, 35.5], [104, 35.5]], [[4, 77], [104, 77]]];
+  const xs = [14, 31.3, 48.7, 66, 83.3]; const parts = [tube(loop.map(p => [...p, z]), 0.09, MAT.gnd, 'gnd')]; let lf = plen(loop.map(p => [...p, z]));
+  ties.forEach(t => { parts.push(tube(t.map(p => [...p, z]), 0.09, MAT.gnd, 'gnd')); lf += 100; });
+  xs.forEach(x => { parts.push(tube([[x, 5, z], [x, 79, z]], 0.09, MAT.gnd, 'gnd')); lf += 74; });
+  const rods = []; for (let i = 0; i < 22; i++) { const t = i / 22, per = 2 * (100 + 74), d = t * per; let x, y;
+    if (d < 100) { x = 4 + d; y = 5; } else if (d < 174) { x = 104; y = 5 + d - 100; } else if (d < 274) { x = 104 - (d - 174); y = 79; } else { x = 4; y = 79 - (d - 274); } rods.push([x, y]); }
+  rods.forEach(([x, y]) => parts.push(cyl(x, y, z - 10, 10, 0.12, MAT.gnd, 'gnd')));
+  reg({ id: 'GRID', name: 'Ground grid (4/0 bare Cu + 22 rods)', type: 'Grounding', layer: 'gnd', sys: 'GND', disc: 'electrical', zone: 'perimeter',
+    props: { Conductor: '4/0 AWG bare Cu', Rods: '22 × ¾ in × 10 ft Cu-clad (BOM I01)', Depth: '30 in (assumed)', 'Conductor length (model)': `${Math.round(lf)} ft`, Note: 'Layout schematic — verify against E-302 & IEEE 80 study' },
+    calc: () => [{ code: 'I01', desc: '¾ in × 10 ft Cu-clad ground rod', qty: 22, unit: 'EA', by: 'Electrical contractor', inst: 'Electrical contractor' },
+      { code: 'I02', desc: '4/0 AWG bare Cu ground conductor', qty: Math.ceil(lf * 1.1), unit: 'FT', by: 'Electrical contractor', inst: 'Electrical contractor' },
+      { code: 'I03', desc: 'Exothermic / compression connections (est. 1 per rod + 2 per tie)', qty: 22 + 2 * (ties.length + xs.length) * 3, unit: 'EA', by: 'Electrical contractor', inst: 'Electrical contractor' }],
+    scope: [['EC', 'Install ground grid, rods and pigtails to all equipment, fence and gates; fall-of-potential test ≤ design value']], src: ['e302'], dwgs: ['E-300', 'E-301', 'E-302'] }, parts);
+})();
+
+/* ============================================================ ZONES (pre-defined areas) ============================================================ */
+Object.assign(ZONES, {
+  bess: { name: 'BESS block (4 containers + pads)', r: [6, 6, 92, 34] },
+  pcs: { name: 'PCS / MVT skids', r: [25, 37, 74, 78] },
+  aux: { name: 'Aux service (T1, rack, light)', r: [95, 30, 122, 48] },
+  poi: { name: 'POI pole line P1–P6', r: [93, 47, 220, 140] },
+  site: { name: 'Whole plant', r: [-5, -5, 230, 160] }
+});
+
+/* ============================================================ VIEWS ============================================================ */
+const VIEWS = {
+  spatial: { show: ['equip', 'pole', 'ohl', 'fence', 'road', 'yard', 'found', 'light'], ghost: [], ground: 1, legend: '' },
+  electrical: { show: ['equip', 'pole', 'ohl', 'cable', 'gnd', 'light'], ghost: ['fence', 'found', 'yard', 'road'], ground: 0.22,
+    legend: [['--mv', '12.47 kV MV'], ['--dc', '1500 VDC'], ['--lv', 'LV / aux'], ['--com', 'Comms'], ['--gnd', 'Grounding']] },
+  civil: { show: ['found', 'pier', 'trench', 'fence', 'road', 'light', 'pole'], ghost: ['equip', 'ohl', 'cable', 'yard'], ground: 0.3,
+    legend: [['#c8c6c0', 'New concrete'], ['#b6b3ab', 'Existing concrete'], ['#8d6e4f', 'Trench 12×48 in'], ['#bdb9b0', 'Crushed rock']] }
+};
+const ghostOf = m => m.userData.ghost || (m.userData.ghost = Object.assign(m.userData.base.clone(), { transparent: true, opacity: m.userData.layer === 'yard' ? 0.35 : 0.1, depthWrite: false }));
+let VIEW = 'spatial';
+function applyView(v) {
+  VIEW = v; const cfg = VIEWS[v];
+  pickables.forEach(m => { const lay = m.userData.layer;
+    const on = cfg.show.some(s => lay.startsWith(s)), gh = cfg.ghost.some(s => lay.startsWith(s));
+    m.visible = on || gh; m.userData.mode = on ? 'on' : gh ? 'ghost' : 'off';
+    m.material = gh ? ghostOf(m) : m.userData.base;
+    m.castShadow = on && !['trench', 'fence'].includes(lay); });
+  ground.material.opacity = cfg.ground; ground.material.depthWrite = cfg.ground > 0.9; grid.visible = cfg.ground < 1;
+  OBJ.forEach(o => { if (o.lblObj) o.lblObj.visible = labelsOn && o.parts.some(p => p.userData.mode === 'on'); });
+  document.querySelectorAll('#views button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  const lg = document.getElementById('legend'); lg.innerHTML = cfg.legend ? cfg.legend.map(([c, t]) => `<div><span class="sw" style="background:${c.startsWith('--') ? `var(${c})` : c}"></span>${t}</div>`).join('') : '';
+  buildObjects(); refreshHighlights();
+}
+
+/* ============================================================ CAMERA ============================================================ */
+const CEN = L(70, 48, 0);
+function cam(kind, animate = true) {
+  const to = kind === 'top' ? L(70, 47.9, 260) : kind === 'front' ? L(70, -150, 22) : L(-55, -95, 120);
+  const tgt = kind === 'front' ? L(70, 48, 12) : CEN;
+  if (!animate) { camera.position.copy(to); controls.target.copy(tgt); return; }
+  const p0 = camera.position.clone(), t0 = controls.target.clone(), st = performance.now();
+  (function step() { const u = Math.min(1, (performance.now() - st) / 600), e = u * u * (3 - 2 * u);
+    camera.position.lerpVectors(p0, to, e); controls.target.lerpVectors(t0, tgt, e); if (u < 1) requestAnimationFrame(step); })();
+}
+function fitTo(objs) {
+  const bb = new THREE.Box3(); objs.forEach(o => bb.union(o.bb)); if (bb.isEmpty()) return;
+  const c = bb.getCenter(new THREE.Vector3()), r = Math.max(30, bb.getSize(new THREE.Vector3()).length() * 0.9);
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  const to = c.clone().add(dir.multiplyScalar(r * 1.4)); const p0 = camera.position.clone(), t0 = controls.target.clone(), st = performance.now();
+  (function step() { const u = Math.min(1, (performance.now() - st) / 500), e = u * u * (3 - 2 * u); camera.position.lerpVectors(p0, to, e); controls.target.lerpVectors(t0, c, e); if (u < 1) requestAnimationFrame(step); })();
+}
+
+/* ============================================================ PICKING / TOOLS ============================================================ */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), hud = document.getElementById('hud'), hint = document.getElementById('hint');
+let TOOL = 'orbit', labelsOn = PREF.labels ?? true;
+function hit(ev, includeGhost = false) {
+  const r = renderer.domElement.getBoundingClientRect(); ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const hs = ray.intersectObjects(pickables.filter(m => m.visible && (includeGhost || m.userData.mode === 'on')), false);
+  if (hs.length) return { p: hs[0].point, obj: OBJ.get(hs[0].object.userData.id) };
+  const t = -ray.ray.origin.y / ray.ray.direction.y; if (t > 0) return { p: ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(t)), obj: null };
+  return null;
+}
+const fmtP = p => { const x = p.x, y = -p.z, sp = toSP(x, y); return `x ${r1(x)}  y ${r1(y)}  z ${r1(p.y)} ft  │  N ${sp.N.toFixed(1)}  E ${sp.E.toFixed(1)}`; };
+
+// measure
+const mGroup = new THREE.Group(); scene.add(mGroup); let mPts = [];
+function measureClick(p) {
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 12), new THREE.MeshBasicMaterial({ color: '#1f6feb', depthTest: false })); dot.position.copy(p); dot.renderOrder = 9; mGroup.add(dot);
+  mPts.push(p.clone());
+  if (mPts.length === 2) {
+    const [a, b] = mPts, g = new THREE.BufferGeometry().setFromPoints([a, b]);
+    const ln = new THREE.Line(g, new THREE.LineBasicMaterial({ color: '#1f6feb', depthTest: false })); ln.renderOrder = 9; mGroup.add(ln);
+    const corner = new THREE.Vector3(b.x, a.y, b.z); // horizontal leg + vertical leg (dashed)
+    const dl = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, corner, b]), new THREE.LineDashedMaterial({ color: '#6b7685', dashSize: 1, gapSize: 0.7, depthTest: false }));
+    dl.computeLineDistances(); dl.renderOrder = 9; mGroup.add(dl);
+    const d3 = a.distanceTo(b), dh = Math.hypot(b.x - a.x, b.z - a.z), dz = b.y - a.y;
+    const el = document.createElement('div'); el.className = 'mlbl'; el.innerHTML = `${FT(d3)}<br><span style="color:#6b7685">horiz ${FT(dh)} · Δz ${FT(dz)}</span>`;
+    const lo = new CSS2DObject(el); lo.position.copy(a.clone().lerp(b, 0.5)); mGroup.add(lo);
+    hint.textContent = `Distance ${FT(d3)} (${r1(d3)} ft) · horizontal ${FT(dh)} · height Δ ${FT(dz)}  —  click to start another, Esc to clear`;
+    mPts = [];
+  } else hint.textContent = `Point 1 at elev ${FT(p.y)} — click second point`;
+}
+function clearMeasure() { mGroup.clear(); mPts = []; mGroup.children.length = 0; document.querySelectorAll('.mlbl').forEach(e => e.remove()); }
+
+// area select
+let SEL = new Set(), areaStart = null; const areaMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: '#1f6feb', transparent: true, opacity: 0.15, depthWrite: false, side: THREE.DoubleSide }));
+areaMesh.rotation.x = -Math.PI / 2; areaMesh.visible = false; areaMesh.renderOrder = 8; scene.add(areaMesh);
+function drawRect([x0, y0, x1, y1]) { const a = Math.min(x0, x1), b = Math.max(x0, x1), c = Math.min(y0, y1), d = Math.max(y0, y1);
+  areaMesh.scale.set(Math.max(b - a, .01), Math.max(d - c, .01), 1); areaMesh.position.copy(L((a + b) / 2, (c + d) / 2, 0.8)); areaMesh.visible = true; return [a, c, b, d]; }
+function selectRect(rect, add = false) {
+  const [a, c, b, d] = drawRect(rect); if (!add) SEL.clear();
+  OBJ.forEach(o => { if (o.id === 'YARD' || o.id === 'FENCE' || o.id === 'GRID' || o.id === 'TRENCH' || o.id === 'ROAD') { if (b - a > 150) SEL.add(o.id); return; }
+    if (o.cable) { if (o.cable.pts.some(p => p[0] >= a && p[0] <= b && p[1] >= c && p[1] <= d)) SEL.add(o.id); return; }
+    if (o.cx >= a && o.cx <= b && o.cy >= c && o.cy <= d) SEL.add(o.id); });
+  if (b - a > 150) OBJ.forEach(o => SEL.add(o.id));
+  refreshHighlights(); showTab('areas'); buildAreas();
+}
+const helpers = [];
+function refreshHighlights() {
+  helpers.forEach(h => scene.remove(h)); helpers.length = 0;
+  const add = (o, color) => { const h = new THREE.Box3Helper(o.bb.clone().expandByScalar(0.25), color); helpers.push(h); scene.add(h); };
+  SEL.forEach(id => { const o = OBJ.get(id); if (o && !o.cable && o.parts.some(p => p.visible)) add(o, '#1f6feb'); });
+  if (DET && OBJ.get(DET)) add(OBJ.get(DET), '#f2a900');
+}
+
+// pointer handling
+let downAt = null;
+renderer.domElement.addEventListener('pointerdown', ev => {
+  downAt = [ev.clientX, ev.clientY];
+  if (TOOL === 'area' && ev.button === 0) { const h = hit(ev, true); if (h) { controls.enabled = false; const g = h.p; areaStart = [g.x, -g.z]; } }
+});
+renderer.domElement.addEventListener('pointermove', ev => {
+  const h = hit(ev); if (h) hud.textContent = (h.obj ? `${h.obj.name}  │  ` : '') + fmtP(h.p);
+  if (areaStart) { const t = -ray.ray.origin.y / ray.ray.direction.y, g = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(t)); drawRect([...areaStart, g.x, -g.z]); }
+});
+renderer.domElement.addEventListener('pointerup', ev => {
+  const moved = downAt && Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]) > 4;
+  if (areaStart) { const t = -ray.ray.origin.y / ray.ray.direction.y, g = ray.ray.origin.clone().add(ray.ray.direction.clone().multiplyScalar(t));
+    if (moved) selectRect([...areaStart, g.x, -g.z], ev.shiftKey); areaStart = null; controls.enabled = true; return; }
+  if (!moved && TOOL === 'measure' && ev.button === 0) { const h = hit(ev); if (h) measureClick(h.p); }
+  if (!moved && TOOL === 'area' && ev.button === 0) { const h = hit(ev); if (h?.obj) { SEL.has(h.obj.id) ? SEL.delete(h.obj.id) : SEL.add(h.obj.id); refreshHighlights(); buildAreas(); showTab('areas'); } }
+});
+renderer.domElement.addEventListener('dblclick', ev => { const h = hit(ev); if (h?.obj) showDetails(h.obj.id); });
+addEventListener('keydown', e => { if (e.key === 'Escape') { clearMeasure(); hint.textContent = toolHint(); areaMesh.visible = false; } });
+
+function toolHint() { return TOOL === 'measure' ? 'Measure: click two points (snaps to object surfaces / grade). Esc clears.' :
+  TOOL === 'area' ? 'Select area: drag a box (Shift adds). Click an object to toggle it. Or pick a preset area at left.' : 'Double-click any object for details · drag to rotate · right-drag to pan · scroll to zoom'; }
+function setTool(t) { TOOL = t; document.querySelectorAll('#tools button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  controls.enableRotate = t !== 'area'; if (t === 'area') cam('top'); hint.textContent = toolHint(); }
+
+/* ============================================================ PANELS ============================================================ */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let DET = null;
+function srcLink(k) { const s = SRC[k]; if (!s) return ''; if (!PDFS) return `${esc(s.t)} <span style="color:var(--mute)">(${esc(s.f)}${s.p ? ', p.' + s.p : ''})</span>`; return `<a href="../${encodeURI(s.f).replace(/#/g, '%23')}${s.p ? '#page=' + s.p : ''}" target="_blank">${esc(s.t)}</a>`; }
+function showDetails(id) {
+  const o = OBJ.get(id); DET = id; const R = document.getElementById('right'); R.hidden = false;
+  const d = o.dims, sp = toSP(o.cx, o.cy), conns = [...OBJ.values()].filter(c => c.cable && c.id !== id && (c.name.includes(id + ' ') || c.name.includes(id + ')') || c.name.endsWith(id)));
+  const bom = o.calc ? o.calc(o) : [];
+  R.innerHTML = `<div class="det"><button class="close" id="dClose">×</button><h2>${esc(o.name)}</h2><div class="sub">${esc(o.type)} · ${o.disc} discipline</div>
+  <h3>Dimensions</h3><table class="kv">
+   ${o.cable ? `<tr><td>Route length</td><td>${FT(o.cable.len)} (${r1(o.cable.len)} ft)</td></tr>` : `<tr><td>L × W × H</td><td>${FT(d.L)} × ${FT(d.W)} × ${FT(d.H)}</td></tr>`}
+   <tr><td>Top / bottom elev.</td><td>${FT(d.top)} / ${FT(d.bot)} (rel. finished grade)</td></tr>
+   <tr><td>Plant x, y</td><td>${r1(o.cx)}, ${r1(o.cy)} ft</td></tr>
+   <tr><td>State plane N / E</td><td>${sp.N.toFixed(1)} / ${sp.E.toFixed(1)}</td></tr>
+   <tr><td>Lat / Long (approx.)</td><td>${sp.lat.toFixed(6)}, ${sp.lon.toFixed(6)}</td></tr></table>
+  <h3>Properties</h3><table class="kv">${Object.entries(o.props || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>
+  ${conns.length ? `<h3>Connections</h3>${conns.map(c => `<div class="row" data-go="${c.id}"><span class="sw" style="background:var(--${c.sys === 'COM' ? 'com' : c.sys.toLowerCase()})"></span>${esc(c.name)}</div>`).join('')}` : ''}
+  ${bom.length ? `<h3>BOM lines</h3><table><tr><th>Code</th><th>Item</th><th>Qty</th><th>By</th></tr>${bom.map(b => `<tr><td>${b.code}</td><td>${esc(b.desc)}</td><td>${b.qty} ${b.unit}</td><td>${esc(b.by)}</td></tr>`).join('')}</table>` : ''}
+  <h3>Drawings</h3><div>${(o.dwgs || []).map(n => `<span class="chip ${(MDL.find(m => m.no === n) || {}).st || ''}" style="margin:2px;display:inline-block">${n}</span>`).join(' ')}</div>
+  <h3>Source</h3><div>${(o.src || []).map(srcLink).join('<br>')}</div>
+  <div style="margin-top:12px;display:flex;gap:6px"><button class="btn" id="dFit">Zoom to</button><button class="btn" id="dSel">${SEL.has(id) ? 'Remove from' : 'Add to'} selection</button></div></div>`;
+  R.querySelector('#dClose').onclick = () => { R.hidden = true; DET = null; refreshHighlights(); onResize(); };
+  R.querySelector('#dFit').onclick = () => fitTo([o]);
+  R.querySelector('#dSel').onclick = () => { SEL.has(id) ? SEL.delete(id) : SEL.add(id); refreshHighlights(); buildAreas(); showDetails(id); };
+  R.querySelectorAll('[data-go]').forEach(e => e.onclick = () => showDetails(e.dataset.go));
+  refreshHighlights(); onResize();
+}
+
+const GROUPS = [['Battery & PCS', o => ['BESS', 'DC'].includes(o.sys) && o.layer === 'equip' || ['TR-1', 'TR-2', 'SKID-1', 'SKID-2'].includes(o.id)], ['Aux & comms', o => o.zone === 'aux' && o.layer === 'equip'],
+  ['Pole line / POI', o => o.zone === 'poi'], ['Cables', o => !!o.cable], ['Foundations', o => o.layer === 'found'], ['Site / civil', o => ['yard', 'fence', 'road', 'trench', 'light', 'gnd'].includes(o.layer)]];
+function buildObjects() {
+  const P = document.getElementById('p-objects');
+  P.innerHTML = `<div class="note">${{ spatial: '<b>Spatial</b> — true-scale layout from E-301 + PNA GA (survey-controlled poles & T1). Use Measure for distances and heights.', electrical: '<b>Electrical</b> — equipment, OH line, underground cables (colour = system) and ground grid. Grade is see-through.', civil: '<b>Civil / structural</b> — foundations, piers, trenches, fence, yard and road. Equipment ghosted.' }[VIEW]}</div>` +
+    GROUPS.map(([g, f]) => { const list = [...OBJ.values()].filter(f).filter(o => o.parts.some(p => p.userData.mode === 'on')); if (!list.length) return '';
+      return `<h3>${g} (${list.length})</h3>` + list.map(o => `<div class="row" data-id="${o.id}">${o.cable ? `<span class="sw" style="background:var(--${o.sys === 'COM' ? 'com' : o.sys.toLowerCase()})"></span>` : ''}${esc(o.name)}</div>`).join(''); }).join('') +
+    `<div class="note">Model basis: 60% electrical set (Gotion + Dynapower + TMC). PCS line-up not frozen — Sineng EH-4200 alternate pending. Items marked "assumed" need confirmation.</div>`;
+  P.querySelectorAll('[data-id]').forEach(e => { e.onclick = () => { showDetails(e.dataset.id); }; e.ondblclick = () => fitTo([OBJ.get(e.dataset.id)]); });
+}
+function buildAreas() {
+  const P = document.getElementById('p-areas'); const sel = [...SEL].map(id => OBJ.get(id));
+  P.innerHTML = `<h3>Preset areas</h3>${Object.entries(ZONES).map(([k, z]) => `<div class="row" data-z="${k}">▢ ${esc(z.name)}</div>`).join('')}
+   <div style="margin:8px 0"><button class="btn" id="aDraw">Draw custom area</button> <button class="btn" id="aClear">Clear</button></div>
+   <h3>Selection (${sel.length})</h3>
+   ${sel.length ? `<div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn primary" id="aBom">BOM</button><button class="btn primary" id="aSow">Work statement</button></div>` : '<div style="color:var(--mute)">Pick a preset area, draw a box, or add objects from their detail panel.</div>'}
+   ${sel.map(o => `<div class="row" data-id="${o.id}">${esc(o.name)}</div>`).join('')}`;
+  P.querySelectorAll('[data-z]').forEach(e => e.onclick = () => { selectRect(ZONES[e.dataset.z].r); fitTo([...SEL].map(i => OBJ.get(i))); });
+  P.querySelectorAll('[data-id]').forEach(e => e.onclick = () => showDetails(e.dataset.id));
+  P.querySelector('#aDraw').onclick = () => setTool('area');
+  P.querySelector('#aClear').onclick = () => { SEL.clear(); areaMesh.visible = false; refreshHighlights(); buildAreas(); };
+  P.querySelector('#aBom')?.addEventListener('click', openBOM); P.querySelector('#aSow')?.addEventListener('click', openSOW);
+}
+
+/* ---- BOM + SOW ---- */
+function bomRows() {
+  const map = new Map();
+  [...SEL].map(id => OBJ.get(id)).forEach(o => (o.calc ? o.calc(o) : []).forEach(b => { const k = b.code + '|' + b.desc + '|' + b.unit;
+    const r = map.get(k) || { ...b, qty: 0, refs: [] }; r.qty += b.qty; r.refs.push(o.id); map.set(k, r); }));
+  return [...map.values()].sort((a, b) => a.code.localeCompare(b.code)).map(r => ({ ...r, qty: Math.round(r.qty * 10) / 10 }));
+}
+const areaName = () => { const z = Object.values(ZONES).find(z => { const [a, c, b, d] = z.r; const [sa, sc, sb, sd] = [areaMesh.position.x - areaMesh.scale.x / 2, -areaMesh.position.z - areaMesh.scale.y / 2, areaMesh.position.x + areaMesh.scale.x / 2, -areaMesh.position.z + areaMesh.scale.y / 2];
+  return Math.abs(a - sa) < 0.5 && Math.abs(b - sb) < 0.5 && Math.abs(c - sc) < 0.5 && Math.abs(d - sd) < 0.5; }); return z ? z.name : `Custom selection (${SEL.size} objects)`; };
+function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+function modal(title, html, btns) { document.getElementById('mTitle').textContent = title; document.getElementById('mBody').innerHTML = html; const mb = document.getElementById('mBtns'); mb.innerHTML = '';
+  btns.forEach(([t, f]) => { const b = document.createElement('button'); b.className = 'btn primary'; b.textContent = t; b.onclick = () => f(b); mb.append(b, ' '); }); document.getElementById('modal').hidden = false; }
+document.getElementById('mClose').onclick = () => document.getElementById('modal').hidden = true;
+function openBOM() {
+  const rows = bomRows(), area = areaName();
+  const csv = [['Code', 'Description', 'Qty', 'Unit', 'Furnished by', 'Installed by', 'Model objects'].join(','), ...rows.map(r => [r.code, `"${r.desc.replace(/"/g, '""')}"`, r.qty, r.unit, r.by, r.inst, `"${r.refs.join(' ')}"`].join(','))].join('\n');
+  modal(`BOM — ${area}`, `<div class="note">Quantities come from the model: equipment counts, cable = route length +10 % × conductors, concrete/trench from geometry. Check against E-403 and the 60% BOM before procurement.</div>
+   <table><tr><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Furnished by</th><th>Installed by</th></tr>${rows.map(r => `<tr><td>${r.code}</td><td>${esc(r.desc)}</td><td style="text-align:right">${r.qty}</td><td>${r.unit}</td><td>${esc(r.by)}</td><td>${esc(r.inst)}</td></tr>`).join('')}</table>`,
+    [canSave() && ['Download CSV', b => saveFile(`Comstock_BOM_${area.replace(/\W+/g, '_')}.csv`, csv, 'text/csv', b)], ['Copy CSV', b => copyText(csv, b)]].filter(Boolean));
+}
+const WHO = { CC: 'Civil / structural contractor', EC: 'Electrical contractor', FG: 'FortifyGrid (owner)', AEP: 'AEP Texas' };
+function openSOW() {
+  const sel = [...SEL].map(id => OBJ.get(id)), area = areaName(), by = {};
+  sel.forEach(o => (o.scope || []).forEach(([w, t]) => (by[w] = by[w] || new Set()).add(t)));
+  const dwgs = [...new Set(sel.flatMap(o => o.dwgs || []))].sort(), rows = bomRows();
+  const md = `# Work Statement — ${area}\n\nProject: VV.5 Comstock BESS, 8 MW / 20 MWh, AEP Texas 12.47 kV, Comstock TX\nGenerated: ${new Date().toISOString().slice(0, 10)} from the Comstock BESS Viewer (basis: 60% electrical set, PNA GA sh.03, Structural IFC Rev 1)\n\n## 1. Area and objects\n${sel.map(o => `- ${o.name}`).join('\n')}\n\n` +
+    Object.entries(by).map(([w, ts], i) => `## ${i + 2}. ${WHO[w] || w} scope\n${[...ts].map(t => `- ${t}`).join('\n')}`).join('\n\n') +
+    `\n\n## ${Object.keys(by).length + 2}. Quantities (from model)\n| Code | Item | Qty | Unit | Furnished by |\n|---|---|---|---|---|\n${rows.map(r => `| ${r.code} | ${r.desc} | ${r.qty} | ${r.unit} | ${r.by} |`).join('\n')}\n\n` +
+    `## ${Object.keys(by).length + 3}. Drawings referenced\n${dwgs.map(n => { const m = MDL.find(x => x.no === n); return `- ${n} ${m ? m.t + ' — ' + ({ have: 'issued', partial: 'partial', missing: 'NOT YET ISSUED' }[m.st]) : ''}`; }).join('\n')}\n\n` +
+    `## General requirements\n- Verify all dimensions in field before construction; report conflicts with drawings by RFI.\n- Work per NEC (NFPA 70), NESC (utility side), NFPA 855, OSHA 1926 and AEP Texas requirements.\n- Owner-furnished equipment (BESS, PCS, MVT) is received, offloaded and set by contractor unless noted.\n- Submit test reports (concrete cylinders, compaction, IR / VLF, ground resistance) before energization.\n- Items marked "assumed" or "not yet issued" are held pending IFC drawings.\n`;
+  modal(`Work statement — ${area}`, `<pre>${esc(md)}</pre>`, [canSave() && ['Download .md', b => saveFile(`Comstock_SOW_${area.replace(/\W+/g, '_')}.md`, md, 'text/markdown', b)],
+    LOCAL && ['Print', () => { const w = open('', '_blank'); if (!w) return; w.document.write(`<pre style="white-space:pre-wrap;font:12px/1.5 Menlo,monospace">${esc(md)}</pre>`); w.print(); }],
+    ['Copy text', b => copyText(md, b)]].filter(Boolean));
+}
+
+/* ---- MDL ---- */
+const MDL = [
+  // CIVIL / STRUCTURAL
+  { no: 'C-001', d: 'civil', t: 'Cover, sheet index & civil general notes', st: 'missing', src: '—' },
+  { no: 'C-100', d: 'civil', t: 'Overall plot plan (boundary, easements, aerial)', st: 'have', src: 'Axial E100 Plot Plan (as-built); Easement rev1' },
+  { no: 'C-101', d: 'civil', t: 'BESS site layout (dimensioned)', st: 'have', src: 'Axial E200 BESS Layout; PNA sh.03 GA' },
+  { no: 'C-102', d: 'civil', t: 'Survey control & point table', st: 'partial', src: 'PNA sh.03 point table (poles, T1 only)' },
+  { no: 'C-200', d: 'civil', t: 'Grading & drainage plan', st: 'missing', src: '—' },
+  { no: 'C-201', d: 'civil', t: 'Erosion & sediment control / SWPPP', st: 'missing', src: '—' },
+  { no: 'C-300', d: 'civil', t: 'Access road & fire-apparatus access', st: 'partial', src: 'Existing 20 ft road shown on E-301' },
+  { no: 'C-400', d: 'civil', t: 'Fence & gate layout', st: 'have', src: 'PNA sh.03; E-301' },
+  { no: 'C-401', d: 'civil', t: 'Fence & gate details', st: 'have', src: 'Axial sh.07–08' },
+  { no: 'C-500', d: 'civil', t: 'Yard surfacing plan & section', st: 'missing', src: '—' },
+  { no: 'C-600', d: 'civil', t: 'Underground trench / utility composite', st: 'partial', src: 'PNA Trench 1/2; E-405' },
+  { no: 'S-001', d: 'civil', t: 'Structural general notes & design criteria', st: 'have', src: 'Structural IFC Rev 1 sh.1; PNA sh.02' },
+  { no: 'S-100', d: 'civil', t: 'Foundation plan (all equipment)', st: 'have', src: 'Foundation Plans S1-0 (05-07-26)' },
+  { no: 'S-201', d: 'civil', t: 'BESS container foundation details', st: 'have', src: 'Structural IFC Rev 1' },
+  { no: 'S-202', d: 'civil', t: 'PCS / MVT skid foundation + extensions', st: 'partial', src: 'Structural IFC Rev 1; E-301 note 2' },
+  { no: 'S-203', d: 'civil', t: 'Aux transformer pad & piers', st: 'have', src: 'PNA sh.04–06' },
+  { no: 'S-204', d: 'civil', t: 'Aux rack & light-pole footings', st: 'missing', src: '—' },
+  { no: 'S-300', d: 'civil', t: 'Pole embedment & guy anchor details', st: 'have', src: 'PNA sh.07; E-400/E-401' },
+  { no: 'S-400', d: 'civil', t: 'Equipment anchorage details', st: 'partial', src: 'OEM templates pending' },
+  { no: 'CS-CALC', d: 'civil', t: 'Geotech summary + foundation & drainage calcs', st: 'partial', src: 'Geotech A254039 (not in this folder)' },
+  // ELECTRICAL
+  { no: 'E-001', d: 'elec', t: 'Electrical index & general notes', st: 'have', src: 'E-100' },
+  { no: 'E-100', d: 'elec', t: 'Overall electrical site plan', st: 'have', src: 'E-300' },
+  { no: 'E-101', d: 'elec', t: 'Equipment layout plan', st: 'have', src: 'E-301' },
+  { no: 'E-102', d: 'elec', t: 'Electrical site plan (enlarged)', st: 'have', src: 'E-303' },
+  { no: 'E-103', d: 'elec', t: 'Elevations & clearances (NFPA 855, NEC 110.26)', st: 'missing', src: '—' },
+  { no: 'E-200', d: 'elec', t: 'One-line diagram', st: 'have', src: 'E-200 (60% — Dynapower config)' },
+  { no: 'E-201', d: 'elec', t: 'Three-line diagram', st: 'missing', src: '—' },
+  { no: 'E-202', d: 'elec', t: 'Protection & metering one-line (ANSI devices)', st: 'missing', src: '—' },
+  { no: 'E-203', d: 'elec', t: 'Control schematics & interlocks (trip, E-stop)', st: 'missing', src: '—' },
+  { no: 'E-300', d: 'elec', t: 'Grounding plan', st: 'have', src: 'E-302' },
+  { no: 'E-301', d: 'elec', t: 'Grounding details', st: 'have', src: 'E-406' },
+  { no: 'E-302', d: 'elec', t: 'Grounding study (IEEE 80)', st: 'missing', src: '—' },
+  { no: 'E-400', d: 'elec', t: 'Riser pole P6 detail', st: 'have', src: 'E-400' },
+  { no: 'E-401', d: 'elec', t: 'Recloser pole P5 detail', st: 'have', src: 'E-401' },
+  { no: 'E-402', d: 'elec', t: 'AEP poles P1–P4 / POI framing', st: 'partial', src: 'PNA sh.03 (location only); AEP standards' },
+  { no: 'E-403', d: 'elec', t: 'Pole-line bill of materials', st: 'have', src: 'E-402' },
+  { no: 'E-500', d: 'elec', t: 'Underground conduit & trench plan', st: 'partial', src: 'E-303 / E-405' },
+  { no: 'E-501', d: 'elec', t: 'Conduit & cable schedule', st: 'have', src: 'E-403' },
+  { no: 'E-502', d: 'elec', t: 'Duct-bank / trench sections', st: 'have', src: 'E-405' },
+  { no: 'E-600', d: 'elec', t: 'Aux service rack + panel schedules', st: 'partial', src: 'E-404 (no panel schedules)' },
+  { no: 'E-601', d: 'elec', t: 'Aux load calc & UPS sizing', st: 'missing', src: '—' },
+  { no: 'E-700', d: 'elec', t: 'SCADA / EMS communication architecture', st: 'missing', src: 'Terabase deliverable' },
+  { no: 'E-701', d: 'elec', t: 'Network / IP schedule & DNP3 points list', st: 'missing', src: 'Terabase / AEP' },
+  { no: 'E-800', d: 'elec', t: 'Site lighting plan', st: 'missing', src: '—' },
+  { no: 'E-900', d: 'elec', t: 'Equipment details & datasheets', st: 'have', src: 'E-407' },
+  { no: 'E-ST', d: 'elec', t: 'Studies: load flow, short circuit, coordination, arc flash + labels', st: 'missing', src: '—' }
+];
+let mdlFilter = 'all';
+function buildMDL() {
+  const P = document.getElementById('p-mdl'), list = MDL.filter(m => mdlFilter === 'all' || m.d === mdlFilter);
+  const cnt = s => list.filter(m => m.st === s).length;
+  P.innerHTML = `<div class="seg" style="margin-bottom:8px">${[['all', 'All'], ['civil', 'Civil / Str'], ['elec', 'Electrical']].map(([k, t]) => `<button data-f="${k}" class="${mdlFilter === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+   <div style="margin-bottom:8px"><span class="chip have">${cnt('have')} issued</span> <span class="chip partial">${cnt('partial')} partial</span> <span class="chip missing">${cnt('missing')} missing</span></div>
+   <div style="color:var(--mute);font-size:12px;margin-bottom:6px">Click a drawing to highlight what it covers in 3D.</div>
+   ${list.map(m => `<div class="row" data-m="${m.no}" style="align-items:flex-start"><b style="width:62px;flex:none">${m.no}</b><div style="flex:1">${esc(m.t)}<div style="color:var(--mute);font-size:11px">${esc(m.src)}</div></div><span class="chip ${m.st}">${m.st}</span></div>`).join('')}`;
+  P.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { mdlFilter = b.dataset.f; buildMDL(); });
+  P.querySelectorAll('[data-m]').forEach(r => r.onclick = () => { const hits = [...OBJ.values()].filter(o => (o.dwgs || []).includes(r.dataset.m));
+    SEL = new Set(hits.map(o => o.id)); areaMesh.visible = false; refreshHighlights(); hint.textContent = hits.length ? `${r.dataset.m}: ${hits.length} model objects highlighted` : `${r.dataset.m}: no model objects linked yet`; if (hits.length) fitTo(hits); });
+}
+
+/* ============================================================ ADMIN: requirements, model basis, settings ============================================================ */
+function savePrefs() { try { localStorage.setItem('cms-viewer-prefs', JSON.stringify(PREF)); } catch { /* storage blocked: settings last for this visit only */ } }
+let DL = null;
+if (!LOCAL && window.claude?.use) window.claude.use('downloads').then(d => { DL = d; }, () => {});
+const canSave = () => LOCAL || !!DL;
+async function saveFile(name, text, mime, btn) {
+  if (LOCAL) return download(name, text, mime);
+  if (!DL) return copyText(text, btn);
+  try { await DL.save({ filename: name, data: text }); btn.textContent = 'Saved'; }
+  catch (e) { if (e?.code === 'declined') return; if (e?.code === 'rate_limited') { btn.textContent = 'Try again in a moment'; return; } copyText(text, btn); }
+}
+function copyText(text, btn) {
+  const done = () => { btn.textContent = 'Copied'; setTimeout(() => btn.textContent = btn.dataset.label, 1500); };
+  btn.dataset.label = btn.dataset.label || btn.textContent;
+  const fallback = () => { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'width:100%;height:160px;margin-bottom:8px;font:12px var(--f-mono)';
+    document.getElementById('mBody').prepend(ta); ta.select(); btn.textContent = 'Press Ctrl/Cmd + C'; };
+  try { navigator.clipboard.writeText(text).then(done, fallback); } catch { fallback(); }
+}
+function reqHTML() {
+  const cnt = (d, s) => MDL.filter(m => m.d === d && m.st === s).length;
+  return `<div class="req" id="reqDoc">
+  <h2>VV.5 Comstock BESS: Plant Viewer Requirements</h2>
+  <div class="meta">FG-CMS-IDE-002 Rev A · supersedes the viewer sections of FG-CMS-IDE-001 · ${new Date().toISOString().slice(0, 10)} · FortifyGrid Engineering</div>
+  <h4>Purpose</h4>
+  <p>One browser page that shows the whole plant at true scale. Anyone on the project can see it, measure it, inspect any object and pull a BOM or work statement for a chosen area. No install and no licence.</p>
+  <h4>1. Three views</h4>
+  <div class="tw"><table><tr><th></th><th>Spatial</th><th>Electrical</th><th>Civil / Structural</th></tr>
+   <tr><td><b>Shows</b></td><td>Fence, gates, 4 BESS, 2 PCS/MVT skids, aux rack, T1, poles P1–P6, light pole</td><td>Equipment, 12.47 kV OH line, MV / DC / LV / comms cables by colour, ground grid</td><td>Foundations (new vs existing), T1 pad and piers, trenches, yard, fence, road</td></tr>
+   <tr><td><b>Accuracy</b></td><td>E-301 dimensions; poles and T1 from the PNA sh.03 survey table</td><td>Routes per E-301 / E-403; length computed and compared to the schedule</td><td>Pad sizes per E-301 / PNA sh.04; volumes computed</td></tr>
+   <tr><td><b>Quantities</b></td><td>Equipment counts</td><td>Cable ft (route +10 % × conductors), conduit, grounding</td><td>Concrete CY, trench LF/CY, yard CY, fence LF</td></tr></table></div>
+  <h4>2. Functions</h4>
+  <ol>
+   <li><b>Measure:</b> click two points to get the 3D distance, the horizontal run and the height difference. Hover shows x / y / elevation and state-plane N / E.</li>
+   <li><b>Inspect:</b> double-click any object for its dimensions, location, ratings, connections, BOM lines, drawing status and source sheet.</li>
+   <li><b>Select an area:</b> pick a preset (BESS block, PCS skids, aux service, pole line, whole plant) or drag a box in plan view.</li>
+   <li><b>BOM:</b> the selected area's quantities, grouped by item code, with who furnishes and who installs each item.</li>
+   <li><b>Work statement:</b> the selected area's scope, split by contractor (Civil, Electrical, Owner, AEP), with the drawings it relies on.</li>
+   <li><b>Drawing list (MDL):</b> each deliverable shows issued, partial or missing. Click one to highlight what it covers in 3D.</li>
+  </ol>
+  <h4>3. Coordinates and units</h4>
+  <p>Plant grid: the origin is the SW fence corner and +x runs along the fence (N38°17′15″E). It is tied to state plane through pole P6 and the PNA point table. Units are feet; switch to metres in Settings.</p>
+  <h4>4. Toolkit (MIT licence only)</h4>
+  <p>Now: three.js r160 (scene, OrbitControls, CSS2D labels). Next phase: That Open Engine + web-ifc (IFC models), dxf-viewer (CAD overlay), turf.js (polygon areas), React Flow (single-line diagram linked to 3D).</p>
+  <h4>5. Drawing status</h4>
+  <p>Civil / structural: ${cnt('civil', 'have')} issued, ${cnt('civil', 'partial')} partial, ${cnt('civil', 'missing')} missing.<br>
+   Electrical: ${cnt('elec', 'have')} issued, ${cnt('elec', 'partial')} partial, ${cnt('elec', 'missing')} missing.<br>
+   Missing: ${MDL.filter(m => m.st === 'missing').map(m => m.no + ' ' + m.t).join('; ')}.</p>
+  <h4>6. Open items before IFC</h4>
+  <ol>
+   <li><b>Freeze the PCS line-up.</b> The 60 % set shows 4 × Dynapower + 2 × TMC; the EMS contract and Sineng GA show 2 × Sineng EH-4200; the Axial as-built shows EPC/CATL. The viewer models the 60 % set.</li>
+   <li><b>Pole positions disagree</b> between E-301 and PNA sh.03 (Oct-26 IFC). The viewer uses PNA sh.03, which is surveyed.</li>
+   <li><b>Confirm these assumed values:</b> foundation thickness 18 in and top of concrete +6 in; yard rock 6 in; fence 7 ft + 1 ft barbed; ground grid depth 30 in and its layout; light-pole location; trench routes.</li>
+   <li><b>Survey the equipment corners</b> (BESS, skids, rack) so the whole model is survey-controlled.</li>
+   <li><b>Issue the missing drawings</b> listed in §5 as the next engineering package.</li>
+  </ol></div>`;
+}
+function basisHTML() {
+  return `<div class="req"><h4>Source drawings used</h4><ul>${Object.values(SRC).map(s => `<li>${esc(s.t)} <span class="meta">(${esc(s.f)}${s.p ? ', p.' + s.p : ''})</span></li>`).join('')}</ul>
+  <h4>Baseline configuration</h4><ul><li>4 × Gotion ESD1331-05P5015 (5.015 MWh each, 20.06 MWh DC nameplate)</li><li>4 × Dynapower CPS-2500 Gen5 PCS on 2 skids with 2 × TMC 4600 kVA 3-winding MVT (60 % BOM)</li>
+   <li>G&amp;W recloser + SEL-651R2 on P5; S&amp;C gang disconnect on P4; AEP metering P3, recloser P2, aux feed P1</li><li>AEP 300 kVA pad-mount T1 → 480 V aux rack (MB, DP, MPC, UPS, EMS, telecom)</li></ul>
+  <h4>Assumed values (shown as "assumed" in details)</h4><ul><li>Foundations 18 in thick, top of concrete 6 in above grade</li><li>Crushed-rock yard 6 in</li><li>Fence 7 ft fabric + 1 ft barbed</li>
+   <li>Ground grid at 30 in, loop plus cross-ties; 22 rods per BOM</li><li>Cable routes and trenches are schematic, following E-301 / E-403</li><li>Light-pole location near the aux rack</li><li>Equipment heights: BESS 9.5 ft, PCS 7.4 ft, MVT 7.2 ft, pole 45 ft with 6.5 ft embedment</li></ul></div>`;
+}
+function settingsHTML() {
+  return `<div class="set">
+   <label for="sUnits">Units<small>Measurements and the detail panel</small></label><select id="sUnits"><option value="ft"${UNITS === 'ft' ? ' selected' : ''}>Feet-inches</option><option value="m"${UNITS === 'm' ? ' selected' : ''}>Metres</option></select>
+   <label for="sLabels">Equipment labels<small>Tags above BESS, PCS, poles</small></label><input type="checkbox" id="sLabels"${labelsOn ? ' checked' : ''}>
+   <label for="sShadows">Shadows<small>Turn off on slower machines</small></label><input type="checkbox" id="sShadows"${sun.castShadow ? ' checked' : ''}>
+   <label for="sView">Opening view<small>Used the next time the page loads</small></label><select id="sView">${['spatial', 'electrical', 'civil'].map(v => `<option value="${v}"${(PREF.view || 'spatial') === v ? ' selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select>
+  </div><p class="meta" style="margin-top:14px">Settings are saved in this browser only.</p>`;
+}
+const printDoc = () => `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Comstock Viewer Requirements</title><style>body{font:13px/1.5 system-ui,sans-serif;color:#111;background:#fff;max-width:780px;margin:24px auto;padding:0 16px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 6px;text-align:left;vertical-align:top}h4{margin:18px 0 6px}.meta{color:#555}.np{float:right;padding:6px 12px;font:inherit}@media print{.np{display:none}}</style></head><body><button class="np" onclick="print()">Print</button>${reqHTML()}</body></html>`;
+function openAdmin(tab = 'req') {
+  const tabs = [['req', 'Requirements'], ['basis', 'Model basis'], ['set', 'Settings']];
+  const body = tab === 'req' ? reqHTML() : tab === 'basis' ? basisHTML() : settingsHTML();
+  const btns = tab !== 'req' ? [] : [
+    LOCAL && ['Print requirements', () => { const w = open('', '_blank'); if (!w) return; w.document.write(printDoc()); w.document.close(); w.focus(); w.print(); }],
+    !LOCAL && canSave() && ['Download printable (.html)', b => saveFile('Comstock_Viewer_Requirements.html', printDoc(), 'text/html', b)],
+    ['Copy text', b => copyText(document.getElementById('reqDoc').innerText, b)]].filter(Boolean);
+  modal('Admin', `<div class="seg" style="margin-bottom:14px">${tabs.map(([k, t]) => `<button data-at="${k}" class="${k === tab ? 'on' : ''}">${t}</button>`).join('')}</div>${body}
+    ${tab === 'req' && !LOCAL ? '<p class="note">To print, download the printable file, open it, and use its Print button.</p>' : ''}`, btns);
+  document.querySelectorAll('[data-at]').forEach(b => b.onclick = () => openAdmin(b.dataset.at));
+  if (tab === 'set') {
+    document.getElementById('sUnits').onchange = e => { UNITS = PREF.units = e.target.value; savePrefs(); if (DET) showDetails(DET); };
+    document.getElementById('sLabels').onchange = e => { labelsOn = PREF.labels = e.target.checked; savePrefs(); applyView(VIEW); };
+    document.getElementById('sShadows').onchange = e => { sun.castShadow = PREF.shadows = e.target.checked; savePrefs(); };
+    document.getElementById('sView').onchange = e => { PREF.view = e.target.value; savePrefs(); };
+  }
+}
+
+/* ============================================================ FORTIFYGRID APP (app.fortifygrid.com/ide/) ============================================================ */
+// The portal Worker signs the user in and gates /ide/; engineers and admins also get the engine's IFC / Excel files.
+if (APP) {
+  document.getElementById('backApps').hidden = false;
+  fetch('/api/me').then(r => r.ok ? r.json() : null).then(me => {
+    const role = me?.apps?.find(a => a.id === 'ide')?.role;
+    if (role !== 'engineer' && role !== 'admin') return;
+    const el = document.getElementById('appDl'); el.hidden = false; el.className = 'seg';
+    el.innerHTML = [['IFC', 'comstock_revA.ifc'], ['Excel', 'comstock_ide_revA.xlsx']].map(([t, f]) =>
+      `<a class="btn" style="border:0;border-radius:0" href="files/${f}">${t}</a>`).join('');
+  }).catch(() => {});
+}
+
+/* ============================================================ UI WIRING ============================================================ */
+function showTab(p) { document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.p === p)); document.querySelectorAll('.pane').forEach(e => e.classList.toggle('on', e.id === 'p-' + p)); }
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.p));
+document.querySelectorAll('#views button').forEach(b => b.onclick = () => applyView(b.dataset.v));
+document.querySelectorAll('#tools button').forEach(b => b.onclick = () => setTool(b.dataset.t));
+document.querySelectorAll('#cams button').forEach(b => b.onclick = () => cam(b.dataset.c));
+document.getElementById('adminBtn').onclick = () => openAdmin('req');
+
+function onResize() { const w = view.clientWidth, h = view.clientHeight; renderer.setSize(w, h); lr.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', onResize);
+new ResizeObserver(onResize).observe(view);
+if (PREF.shadows === false) sun.castShadow = false;
+onResize(); cam('iso', false); applyView(PREF.view || 'spatial'); buildAreas(); buildMDL(); hint.textContent = toolHint();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); lr.render(scene, camera); });
+window.__viewer = { OBJ, SEL, applyView, selectRect, openBOM, openSOW, showDetails };
+</script>
+</html>
