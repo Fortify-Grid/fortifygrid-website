@@ -31,3 +31,12 @@ A push to `main` deploys: `.github/workflows/deploy.yml` applies `schema.sql`, t
 - For new IFC / Excel files, run the engine in `fortifygrid-ide` and copy the outputs into `public/dashboard/ide/files/`.
 
 © 2024 Fortify Grid. All Rights Reserved.
+
+## Code / UI map
+| What | File |
+|---|---|
+| Public site | `public/index.html`, `site.css`, `script.js` |
+| Portal tiles | `public/dashboard/index.html`, `portal.js`, `portal.css` |
+| Admin (users, apps, roles, tabs) | `public/dashboard/admin/index.html` |
+| Worker (routing, auth, `/api/`, app gates e.g. `/ide/`) | `worker.js`; tables `schema.sql` |
+| Cloudflare setup script | `infra/cf-setup.mjs` |
