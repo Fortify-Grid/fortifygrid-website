@@ -6,7 +6,8 @@
   // workers.dev and preview URLs are off so there is no address that skips Access.
   "routes": [
     { "pattern": "fortifygrid.com", "custom_domain": true },
-    { "pattern": "www.fortifygrid.com", "custom_domain": true }
+    { "pattern": "www.fortifygrid.com", "custom_domain": true },
+    { "pattern": "app.fortifygrid.com", "custom_domain": true }
   ],
   "workers_dev": false,
   "preview_urls": false,
@@ -20,7 +21,7 @@
   "vars": {
     // Not secrets: Cloudflare puts these in every login token. Filled in by infra/cf-setup.mjs output.
     "CF_ACCESS_TEAM_DOMAIN": "fortifyai.cloudflareaccess.com",
-    "CF_ACCESS_AUD": "6631bbc06cd25cc8b4b203b91be81f91481919a8d92705ead6940b29048b70bb",
+    "CF_ACCESS_AUD": "6631bbc06cd25cc8b4b203b91be81f91481919a8d92705ead6940b29048b70bb,aaa33471e5133335fb1d2d4c9a00e231038e3b54e90f80b076f57db5e93ce539",
     // Always full admins, even before they are in the database. Comma-separated.
     "ADMIN_EMAILS": "krishnan@fortifygrid.com",
     "CF_ACCOUNT_ID": "5b09f3b0f591d77cd46739113e886479",

@@ -2,7 +2,7 @@
 
 AI-Driven, Modular Solutions for a Resilient, Adaptive Grid.
 
-Cloudflare Worker serving the public site (`public/`) and the signed-in portal (`/dashboard`, `/dashboard/admin`),
+Cloudflare Worker serving the public site (`public/`) and the signed-in portal at app.fortifygrid.com (`/`, `/admin/`; files in `public/dashboard/`),
 which controls who can use every FortifyGrid app.
 
 | Doc | |

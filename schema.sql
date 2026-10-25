@@ -127,3 +127,32 @@ INSERT INTO role_tabs (app_id, role, tab)
 INSERT INTO role_tabs (app_id, role, tab)
   SELECT 'revenue', 'admin', tab FROM app_tabs WHERE app_id = 'revenue'
   AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'revenue' AND role = 'admin');
+
+-- Dashboard folders: which section each app's tile sits in (admin → Apps → Folder). Folders sort by the lowest
+-- folder_sort among their apps; apps without a row show under "Other apps".
+CREATE TABLE IF NOT EXISTS app_folders (
+  app_id      TEXT PRIMARY KEY,
+  folder      TEXT NOT NULL,
+  folder_sort INTEGER NOT NULL DEFAULT 100
+);
+
+-- IDE — Integrated Digital Engineering model (Fortify-Grid/fortifygrid-ide). Static 3D viewer + IFC / Excel outputs.
+-- Tabs: qa = QA findings panel, downloads = IFC / Excel files. Roles: viewer looks, engineer also downloads, admin everything.
+INSERT OR IGNORE INTO apps (id, name, description, url, roles, sort, created_at, updated_at) VALUES
+  ('ide', 'IDE — Digital Engineering Model', 'BESS site digital twin: layered 3D model, cable and trench trace, foundation loads, QA, IFC / Excel.',
+   'https://ide.fortifygrid.com/', '["viewer","engineer","admin"]', 4, datetime('now'), datetime('now'));
+INSERT OR IGNORE INTO app_tabs (app_id, tab, label, sort) VALUES
+  ('ide', 'qa', 'QA findings', 1),
+  ('ide', 'downloads', 'Download IFC / Excel', 2);
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'ide', 'viewer', tab FROM app_tabs WHERE app_id = 'ide' AND tab IN ('qa')
+  AND NOT EXISTS (SELECT 1 FROM role_tabs WHERE app_id = 'ide');
+INSERT INTO role_tabs (app_id, role, tab)
+  SELECT 'ide', r.role, t.tab FROM (SELECT 'engineer' AS role UNION ALL SELECT 'admin') r, (SELECT 'qa' AS tab UNION ALL SELECT 'downloads') t
+  WHERE NOT EXISTS (SELECT 1 FROM role_tabs x WHERE x.app_id = 'ide' AND x.role = r.role);
+
+INSERT OR IGNORE INTO app_folders (app_id, folder, folder_sort) VALUES
+  ('heatmap', 'Market Data', 1),
+  ('query', 'Market Data', 1),
+  ('revenue', 'BTM Agentic Tools', 2),
+  ('ide', 'BTM Agentic Tools', 2);

@@ -1,6 +1,6 @@
 // Shared helpers for the signed-in portal pages.
 export async function api(path, opts = {}) {
-  const res = await fetch(`/dashboard/api/${path}`, {
+  const res = await fetch(`/api/${path}`, {
     ...opts,
     headers: { 'content-type': 'application/json', ...(opts.headers || {}) },
     body: opts.body ? JSON.stringify(opts.body) : undefined,

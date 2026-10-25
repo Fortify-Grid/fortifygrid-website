@@ -66,13 +66,13 @@ The file lives at `~/.config/fortifygrid/secrets.env`: outside git and outside G
 Then tell the LLM **"done"**.
 
 ## 6. After the LLM deploys (5 min)
-- Open fortifygrid.com/dashboard → sign in with Google → **Manage users** → add people and pick their app roles.
+- Open app.fortifygrid.com → sign in with Google → **Manage users** → add people and pick their app roles.
 - GitHub: if the LLM asks, run the one `gh secret set` command it gives you.
 
 ## Everyday (no setup)
 | You want | Do |
 |---|---|
-| Give or remove access | fortifygrid.com/dashboard/admin → Users |
+| Give or remove access | app.fortifygrid.com/admin → Users |
 | Dashboard banner | Admin → Settings → `dashboard_notice` |
 | Change the site or an app | Ask the LLM in the repo folder; it edits, pushes, and the change is live in about 1 minute |
 | A new app | Ask the LLM: "add app X" (it follows INFRA.md §7). Then add users in admin |

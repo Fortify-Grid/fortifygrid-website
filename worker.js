@@ -1,9 +1,11 @@
-// fortifygrid.com — public site (./public) plus the signed-in portal at /dashboard. See INFRA.md.
+// fortifygrid.com — public site (./public). app.fortifygrid.com — the signed-in portal (files in ./public/dashboard,
+// served at the root of that host; fortifygrid.com/dashboard/* redirects there). See INFRA.md.
 //
-// Sign-in is Cloudflare Access (Google or one-time email code) in front of /dashboard and every app host.
+// Sign-in is Cloudflare Access (Google or one-time email code) in front of app.fortifygrid.com and every app host.
 // This Worker is the one place that decides who may use which app. Everything is in D1 `fortifygrid-portal`
-// and edited at /dashboard/admin/:
+// and edited at app.fortifygrid.com/admin/:
 //   - apps:       registered apps (tile, URL, roles, their Cloudflare Access app + group)
+//   - app_folders: which dashboard folder each app's tile sits in (e.g. Market Data, BTM Agentic Tools)
 //   - users:      people, admin flag, active flag;  app_access: role per user per app
 //   - settings:   site config (key → value), e.g. dashboard_notice
 //   - audit:      every admin change
@@ -18,6 +20,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const APP_ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
 const SETTING_KEY_RE = /^[a-z][a-z0-9_]{1,40}$/;
 const ROLE_RE = /^[a-z][a-z0-9_-]{1,20}$/;
+const APP_HOST = 'app.fortifygrid.com';
+const PORTAL_URL = `https://${APP_HOST}/`;
+const appHost = (env) => (env.APP_HOST || APP_HOST).trim().toLowerCase();
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -84,15 +89,18 @@ async function accessEmail(req, env) {
 const appRow = (r) => ({
   id: r.id, name: r.name, description: r.description, url: r.url, roles: JSON.parse(r.roles || '[]'),
   access_group_id: r.access_group_id, access_aud: r.access_aud, enabled: Boolean(r.enabled), sort: r.sort,
+  folder: r.folder || '', folder_sort: r.folder_sort ?? 100,
 });
 
+const APP_SELECT = 'SELECT a.*, f.folder, f.folder_sort FROM apps a LEFT JOIN app_folders f ON f.app_id = a.id';
+
 async function listApps(env, { all = false } = {}) {
-  const { results } = await env.DB.prepare(`SELECT * FROM apps ${all ? '' : 'WHERE enabled = 1'} ORDER BY sort, name`).all();
+  const { results } = await env.DB.prepare(`${APP_SELECT} ${all ? '' : 'WHERE a.enabled = 1'} ORDER BY a.sort, a.name`).all();
   return results.map(appRow);
 }
 
 async function getApp(env, id) {
-  const r = await env.DB.prepare('SELECT * FROM apps WHERE id = ?').bind(id).first();
+  const r = await env.DB.prepare(`${APP_SELECT} WHERE a.id = ?`).bind(id).first();
   return r ? appRow(r) : null;
 }
 
@@ -116,7 +124,7 @@ const touch = (env, email) => env.DB.prepare('UPDATE users SET last_seen_at = ?1
 
 async function currentUser(req, env) {
   const email = await accessEmail(req, env);
-  if (!email) throw new HttpError(401, 'Not signed in. Open https://fortifygrid.com/dashboard/ to sign in.');
+  if (!email) throw new HttpError(401, `Not signed in. Open ${PORTAL_URL} to sign in.`);
   const user = await loadUser(env, email);
   if (!user) throw new HttpError(403, `${email} has not been given access. Ask a FortifyGrid admin to add you.`);
   await touch(env, email);
@@ -200,11 +208,11 @@ async function provisionAccess(env, name, host) {
 async function sendInvite(env, email, grants) {
   const apps = (await listApps(env)).filter((a) => grants?.[a.id]);
   const subject = 'Your access to FortifyGrid apps';
-  const list = apps.map((a) => `- ${a.name}: ${a.url}`).join('\n') || '- Dashboard: https://fortifygrid.com/dashboard/';
+  const list = apps.map((a) => `- ${a.name}: ${a.url}`).join('\n') || `- Dashboard: ${PORTAL_URL}`;
   const text = [
     'Hello,', '', 'You have been given access to FortifyGrid apps:', list, '',
     'How to sign in:',
-    '1. Open https://fortifygrid.com/dashboard/',
+    `1. Open ${PORTAL_URL}`,
     `2. Choose Google (if ${email} is a Google account) or enter ${email} to get a one-time code by email.`,
     '3. Open any app tile. No password is needed.', '', 'FortifyGrid',
   ].join('\n');
@@ -299,9 +307,19 @@ async function saveApp(env, actor, body) {
         updated_at = excluded.updated_at`)
     .bind(id, name, String(body.description || '').slice(0, 300), url.href, JSON.stringify(roles), groupId, aud,
       body.enabled === false ? 0 : 1, Number(body.sort) || 0, t, t).run();
+  // Folder = the dashboard section the tile sits in. Folders sort by the lowest folder_sort among their apps.
+  const folder = String(body.folder ?? existing?.folder ?? '').trim().slice(0, 60);
+  if (folder) {
+    const folderSort = Number(body.folder_sort ?? existing?.folder_sort ?? (await env.DB.prepare(
+      'SELECT MIN(folder_sort) AS s FROM app_folders WHERE folder = ?').bind(folder).first())?.s ?? 100);
+    await env.DB.prepare(`INSERT INTO app_folders (app_id, folder, folder_sort) VALUES (?, ?, ?)
+        ON CONFLICT(app_id) DO UPDATE SET folder = excluded.folder, folder_sort = excluded.folder_sort`).bind(id, folder, folderSort).run();
+  } else {
+    await env.DB.prepare('DELETE FROM app_folders WHERE app_id = ?').bind(id).run();
+  }
   // Roles that no longer exist are dropped from users.
   await env.DB.prepare(`DELETE FROM app_access WHERE app_id = ? AND role NOT IN (SELECT value FROM json_each(?))`).bind(id, JSON.stringify(roles)).run();
-  await audit(env, actor.email, existing ? 'update app' : 'add app', id, JSON.stringify({ name, url: url.href, roles, enabled: body.enabled !== false }));
+  await audit(env, actor.email, existing ? 'update app' : 'add app', id, JSON.stringify({ name, url: url.href, roles, folder, enabled: body.enabled !== false }));
   const sync = groupId ? await syncAccessGroups(env) : undefined;
   return { ok: true, id, note, sync, aud };
 }
@@ -366,7 +384,7 @@ async function deleteSetting(env, actor, key) {
 
 async function api(req, env, url) {
   const user = await currentUser(req, env);
-  const path = url.pathname.replace(/^\/dashboard\/api\//, '').replace(/\/+$/, '');
+  const path = url.pathname.replace(/^\/(dashboard\/)?api\//, '').replace(/\/+$/, '');
   const method = req.method;
 
   // Writes must come from our own pages (blocks cross-site form posts riding the Access cookie).
@@ -378,7 +396,7 @@ async function api(req, env, url) {
 
   if (path === 'me' && method === 'GET') {
     const apps = (await listApps(env)).filter((a) => user.apps[a.id])
-      .map(({ id, name, description, url: u }) => ({ id, name, description, url: u, role: user.apps[id] }));
+      .map(({ id, name, description, url: u, folder, folder_sort }) => ({ id, name, description, url: u, folder, folder_sort, role: user.apps[id] }));
     const notice = await env.DB.prepare("SELECT value FROM settings WHERE key = 'dashboard_notice'").first();
     return json({ email: user.email, name: user.name, admin: user.admin, apps, notice: notice?.value || '' });
   }
@@ -461,22 +479,55 @@ export class Directory extends WorkerEntrypoint {
   }
 }
 
+// app.fortifygrid.com/<path> is served from ./public/dashboard/<path>; /api/* is the portal API; /assets/* is shared.
+async function portalHost(req, env, url) {
+  if (url.pathname.startsWith('/api/')) return apiResponse(req, env, url);
+  if (url.pathname === '/dashboard' || url.pathname.startsWith('/dashboard/')) {
+    url.pathname = url.pathname.slice('/dashboard'.length) || '/';
+    return Response.redirect(url.toString(), 301);
+  }
+  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/cdn-cgi/')) return env.ASSETS.fetch(req);
+  const inner = new URL(url);
+  inner.pathname = `/dashboard${url.pathname}`;
+  const res = await env.ASSETS.fetch(new Request(inner, req));
+  // Trailing-slash redirects from the asset server point at /dashboard/...; strip it for this host.
+  const loc = res.headers.get('location');
+  if (loc && res.status >= 300 && res.status < 400) {
+    const to = new URL(loc, inner);
+    if (to.pathname.startsWith('/dashboard')) {
+      to.pathname = to.pathname.slice('/dashboard'.length) || '/';
+      to.host = url.host;
+      to.protocol = url.protocol;
+      return Response.redirect(to.toString(), res.status === 308 ? 308 : 307);
+    }
+  }
+  return res;
+}
+
+async function apiResponse(req, env, url) {
+  try {
+    return await api(req, env, url);
+  } catch (e) {
+    if (e instanceof HttpError) return json({ message: e.message }, e.status);
+    console.error(e);
+    return json({ message: 'Server error' }, 500);
+  }
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
-    // One canonical host: Access protects fortifygrid.com/dashboard, not www.
+    // One canonical host per site: www → apex.
     if (url.hostname.startsWith('www.')) {
       url.hostname = url.hostname.slice(4);
       return Response.redirect(url.toString(), 301);
     }
-    if (url.pathname.startsWith('/dashboard/api/')) {
-      try {
-        return await api(req, env, url);
-      } catch (e) {
-        if (e instanceof HttpError) return json({ message: e.message }, e.status);
-        console.error(e);
-        return json({ message: 'Server error' }, 500);
-      }
+    if (url.hostname === appHost(env)) return portalHost(req, env, url);
+    // The portal moved to app.fortifygrid.com; old links keep working.
+    if (url.pathname === '/dashboard' || url.pathname.startsWith('/dashboard/')) {
+      const to = new URL(url.pathname.slice('/dashboard'.length) || '/', `${url.protocol}//${appHost(env)}${url.port ? `:${url.port}` : ''}`);
+      to.search = url.search;
+      return Response.redirect(to.toString(), 301);
     }
     return env.ASSETS.fetch(req);
   },

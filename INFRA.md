@@ -11,6 +11,8 @@ with one read-only DB user per app.
 | Item | State |
 |---|---|
 | fortifygrid.com, /dashboard, heatmap.fortifygrid.com live on Workers; old Pages domains removed; GitHub Pages off | ✅ 2026-10-10 |
+| Portal moved to **app.fortifygrid.com** (Access app "FortifyGrid Apps" → group "FortifyGrid users"); fortifygrid.com/dashboard/* 301s there. Dashboard tiles grouped by folder (`app_folders`): Market Data = heatmap, query; BTM Agentic Tools = revenue, ide. Staged website = separate "Website" section (admins) at app.fortifygrid.com/staging/ | ✅ 2026-10-24 |
+| IDE app `ide.fortifygrid.com` (repo `Fortify-Grid/fortifygrid-ide`, `app/`): roles viewer/engineer/admin, tabs qa/downloads; Access app + group "IDE — Digital Engineering Model users" | ✅ 2026-10-24 |
 | Login: Access team `fortifyai`, Google + email code; dashboard and heatmap Access apps + groups | ✅ |
 | Auto-deploy: push `main` → Actions (secrets set in both repos, token `fortifygrid-setup`) | ✅ |
 | Roles × tabs per app (admin → Apps → Tabs); heatmap tabs: filters, database, csv_upload, gis_layers, generators, results, search | ✅ |
@@ -21,7 +23,8 @@ with one read-only DB user per app.
 ## 2. Repos, accounts, IDs
 | Repo `Fortify-Grid/…` | Local folder | Serves |
 |---|---|---|
-| `fortifygrid-website` | `Shared drives/4. Fortify AI LLC/11. AI Code/6. FortifyGrid Website` | fortifygrid.com: `public/` site, `worker.js` portal, `/dashboard`, `/dashboard/admin` |
+| `fortifygrid-website` | `Shared drives/4. Fortify AI LLC/11. AI Code/6. FortifyGrid Website` | fortifygrid.com: `public/` site; app.fortifygrid.com: `worker.js` portal (files in `public/dashboard/`, served at the host root: `/`, `/admin/`, `/staging/`, API `/api/`) |
+| `fortifygrid-ide` | `Shared drives/10. Corporate Docs/3. Knowledge base/BTM/IDE` | ide.fortifygrid.com: Python IDE model (`engine/`) + app Worker (`app/`, own copy of `app-worker.js`) |
 | `FGAI-RAG` | `…/11. AI Code/2. FGAI-RAG` | One folder per app: `apps/heatmap/` (worker + `web/` viewer) → heatmap.fortifygrid.com, `apps/query/` → query.fortifygrid.com. Shared Access/role code: `shared/app-worker.js`. Website repo = site + portal only |
 | `FGDataETL` | `~/FortifyAI/FGDataETL` | ETL into RDS `fortify` (not Cloudflare) |
 
@@ -63,7 +66,7 @@ echo "$CF_SETUP_TOKEN" | npx wrangler secret put CF_API_TOKEN
 
 ## 5. How it works
 ```
-Browser → fortifygrid.com/dashboard  or  <app>.fortifygrid.com
+Browser → app.fortifygrid.com (portal)  or  <app>.fortifygrid.com
  → Cloudflare Access: Google or email code; allowed only if the email is in that app's Access group
  → Worker (run_worker_first): PORTAL.config(appId) → {team_domain, aud} → verify JWT (iss, aud, exp, sig)
    → PORTAL.access(email, appId) → role, else 401/403 → serve ./dist, or /api/* → Hyperdrive → RDS (read-only)
@@ -74,14 +77,17 @@ dashboard, "<Name> users" per app; ADMIN_EMAILS are always included)
 - **Access apps:** self-hosted, all login methods, 24h sessions, HttpOnly cookie, SameSite Lax, policy Allow → group.
 - **DNS:** nothing by hand. Worker `custom_domain` routes create the records and certificates.
 - **Admin page:** tabs Users / Apps (Create Access provisions the Access app + group) / Settings (`dashboard_notice`) / Activity.
-- **Portal API (`/dashboard/api/`):**
+- **Folders:** admin → Apps → Folder (free text; existing folders offered). Tiles group by folder on the dashboard.
+- **Portal API (`app.fortifygrid.com/api/`; old `/dashboard/api/` paths still parse):**
   - `me`, `admin/overview`, `admin/users`, `admin/apps`, `admin/settings`, `admin/sync`, `admin/audit`.
   - Writes require a same-origin JSON request.
 
 ## 6. Verify
 ```bash
 curl -sI https://fortifygrid.com | head -1                       # 200
-curl -sI https://fortifygrid.com/dashboard/ | grep -i location   # → fortifyai.cloudflareaccess.com
+curl -sI https://fortifygrid.com/dashboard/ | grep -i location   # → https://app.fortifygrid.com/
+curl -sI https://app.fortifygrid.com/ | grep -i location         # → fortifyai.cloudflareaccess.com
+curl -sI https://ide.fortifygrid.com/ | grep -i location         # → Access login
 curl -sI https://heatmap.fortifygrid.com | grep -i location      # → Access login
 ```
 

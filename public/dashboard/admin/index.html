@@ -6,14 +6,14 @@
   <title>FortifyGrid Admin</title>
   <link rel="icon" type="image/png" href="/assets/favicon.png">
   <link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/dashboard/portal.css">
+  <link rel="stylesheet" href="/portal.css">
 </head>
 <body>
   <header>
     <a href="/"><img src="/assets/fortify-logo.svg" alt="FortifyGrid"></a>
     <nav>
       <span id="who" class="muted"></span>
-      <a href="/dashboard/">Apps</a>
+      <a href="/">Apps</a>
       <a href="/cdn-cgi/access/logout">Sign out</a>
     </nav>
   </header>
@@ -43,18 +43,20 @@
     </section>
 
     <section data-panel="apps" hidden>
-      <p class="muted">Apps shown as dashboard tiles. A new app also needs its Worker deployed (INFRA.md → New app).</p>
+      <p class="muted">Apps shown as dashboard tiles, grouped by folder. A new app also needs its Worker deployed (INFRA.md → New app).</p>
       <form class="add" id="add-app">
         <label>Id<input type="text" name="id" required placeholder="heatmap" pattern="[a-z][a-z0-9-]{1,30}"></label>
         <label>Name<input type="text" name="title" required placeholder="Grid Heatmap"></label>
         <label>URL<input type="text" name="url" required placeholder="https://heatmap.fortifygrid.com/"></label>
         <label>Roles (lowest first)<input type="text" name="roles" value="viewer,admin"></label>
+        <label>Folder<input type="text" name="folder" list="folders" placeholder="Market Data"></label>
+        <datalist id="folders"></datalist>
         <label style="flex:1 1 240px">Description<input type="text" name="description"></label>
         <label class="check"><input type="checkbox" name="provision" checked> Create Cloudflare Access</label>
         <button type="submit">Add / update app</button>
       </form>
       <div class="table-wrap"><table>
-        <thead><tr><th>App</th><th>URL</th><th>Roles</th><th>Cloudflare Access</th><th>On</th><th></th></tr></thead>
+        <thead><tr><th>App</th><th>Folder</th><th>URL</th><th>Roles</th><th>Cloudflare Access</th><th>On</th><th></th></tr></thead>
         <tbody id="apps"></tbody>
       </table></div>
       <div id="tabs-editor" hidden>
@@ -86,7 +88,7 @@
   </main>
 
   <script type="module">
-    import { api, esc, showMsg } from '/dashboard/portal.js';
+    import { api, esc, showMsg } from '/portal.js';
     const $ = (id) => document.getElementById(id);
     const msg = $('msg');
     const when = (s) => (s ? esc(s.slice(0, 16).replace('T', ' ')) : 'never');
@@ -154,6 +156,7 @@
       $('apps').innerHTML = state.apps.map((a) => `
         <tr data-id="${esc(a.id)}">
           <td><b>${esc(a.name)}</b><br><span class="muted">${esc(a.id)} · ${esc(a.description)}</span></td>
+          <td>${esc(a.folder) || '<span class="muted">—</span>'}</td>
           <td><a href="${esc(a.url)}">${esc(a.url)}</a></td>
           <td>${esc(a.roles.join(', '))}</td>
           <td class="muted">${a.access_aud ? `ready<br><small>group ${esc(a.access_group_id.slice(0, 8))}…</small>` : 'not set up'}</td>
@@ -161,6 +164,7 @@
           <td class="row-actions"><button class="ghost" data-act="tabs">Tabs</button><button class="ghost" data-act="edit">Edit</button>${a.access_aud ? '' : '<button data-act="provision">Create Access</button>'}</td>
         </tr>`).join('') || '<tr><td>No apps yet.</td></tr>';
 
+      $('folders').innerHTML = [...new Set(state.apps.map((a) => a.folder).filter(Boolean))].map((f) => `<option value="${esc(f)}">`).join('');
       $('settings').innerHTML = state.settings.map((s) => `
         <tr data-key="${esc(s.key)}"><td><code>${esc(s.key)}</code></td><td>${esc(s.value)}</td>
         <td class="muted">${when(s.updated_at)} · ${esc(s.updated_by)}</td>
@@ -225,12 +229,13 @@
     }));
 
     /* apps */
-    const appBody = (a, extra = {}) => ({ id: a.id, name: a.name, url: a.url, roles: a.roles.join(','), description: a.description, enabled: a.enabled, sort: a.sort, ...extra });
+    const appBody = (a, extra = {}) => ({ id: a.id, name: a.name, url: a.url, roles: a.roles.join(','), description: a.description, enabled: a.enabled, sort: a.sort, folder: a.folder, ...extra });
     $('add-app').addEventListener('submit', run(async (e) => {
       e.preventDefault();
       const f = e.target;
       const r = await api('admin/apps', { method: 'POST', body: {
-        id: f.id.value, name: f.title.value, url: f.url.value, roles: f.roles.value, description: f.description.value, provision: f.provision.checked,
+        id: f.id.value, name: f.title.value, url: f.url.value, roles: f.roles.value, description: f.description.value, folder: f.folder.value,
+        sort: state.apps.find((x) => x.id === f.id.value)?.sort, provision: f.provision.checked,
       } });
       report(r, `Saved app ${r.id}.`);
       f.reset();
@@ -243,7 +248,7 @@
       if (act === 'tabs') { openTabs(a); return; }
       if (act === 'edit') {
         const f = $('add-app');
-        f.id.value = a.id; f.title.value = a.name; f.url.value = a.url; f.roles.value = a.roles.join(','); f.description.value = a.description;
+        f.id.value = a.id; f.title.value = a.name; f.url.value = a.url; f.roles.value = a.roles.join(','); f.description.value = a.description; f.folder.value = a.folder;
         f.provision.checked = !a.access_aud;
         f.scrollIntoView({ behavior: 'smooth' });
       } else if (act === 'provision') {

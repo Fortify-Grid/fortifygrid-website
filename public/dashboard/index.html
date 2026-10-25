@@ -6,14 +6,14 @@
   <title>FortifyGrid Dashboard</title>
   <link rel="icon" type="image/png" href="/assets/favicon.png">
   <link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/dashboard/portal.css">
+  <link rel="stylesheet" href="/portal.css">
 </head>
 <body>
   <header>
-    <a href="/"><img src="/assets/fortify-logo.svg" alt="FortifyGrid"></a>
+    <a href="https://fortifygrid.com/"><img src="/assets/fortify-logo.svg" alt="FortifyGrid"></a>
     <nav>
       <span id="who" class="muted"></span>
-      <a id="admin-link" href="/dashboard/admin/" hidden>Manage users</a>
+      <a id="admin-link" href="/admin/" hidden>Manage users</a>
       <a href="/cdn-cgi/access/logout">Sign out</a>
     </nav>
   </header>
@@ -22,23 +22,33 @@
     <p class="muted">Apps you have been given access to. Ask an admin if one is missing.</p>
     <div id="notice" class="msg" hidden></div>
     <div id="msg" class="msg" hidden></div>
-    <div id="tiles" class="tiles"></div>
+    <div id="tiles"></div>
   </main>
   <script type="module">
-    import { api, esc, showMsg } from '/dashboard/portal.js';
+    import { api, esc, showMsg } from '/portal.js';
     const msg = document.getElementById('msg');
+    const tile = (a) => `<a class="tile" href="${esc(a.url)}"><h2>${esc(a.name)}</h2><p class="muted">${esc(a.description)}</p><span class="role">${esc(a.role)}</span></a>`;
     try {
       const me = await api('me');
       document.getElementById('who').textContent = me.email;
       document.getElementById('admin-link').hidden = !me.admin;
       if (me.notice) showMsg(document.getElementById('notice'), me.notice);
-      // Admins also get the staged website: the next version of fortifygrid.com, served under /dashboard so only signed-in users can open it.
-      const staged = me.admin
-        ? `<a class="tile" href="/dashboard/staging/"><h2>Staged website</h2><p class="muted">Walk through the next version of fortifygrid.com exactly as it will look, before it goes live.</p><span class="role">admin</span></a>`
-        : '';
-      document.getElementById('tiles').innerHTML =
-        me.apps.map((a) => `<a class="tile" href="${esc(a.url)}"><h2>${esc(a.name)}</h2><p class="muted">${esc(a.description)}</p><span class="role">${esc(a.role)}</span></a>`).join('') + staged;
-      if (!me.apps.length && !staged) showMsg(msg, 'No apps yet. Ask a FortifyGrid admin to give you access.');
+      // Apps grouped into folders (admin → Apps → Folder); folders in folder_sort order, "Other apps" last.
+      const folders = new Map();
+      for (const a of [...me.apps].sort((x, y) => (x.folder ? x.folder_sort : 1e9) - (y.folder ? y.folder_sort : 1e9))) {
+        const name = a.folder || 'Other apps';
+        if (!folders.has(name)) folders.set(name, []);
+        folders.get(name).push(a);
+      }
+      let html = [...folders].map(([name, apps]) =>
+        `<section class="folder"><h2 class="folder-title">${esc(name)}</h2><div class="tiles">${apps.map(tile).join('')}</div></section>`).join('');
+      // The staged website (next version of fortifygrid.com) is kept apart from the apps; admins only.
+      if (me.admin) {
+        html += `<section class="folder"><h2 class="folder-title">Website</h2><div class="tiles"><a class="tile" href="/staging/"><h2>Staged website</h2>
+          <p class="muted">Walk through the next version of fortifygrid.com exactly as it will look, before it goes live.</p><span class="role">admin</span></a></div></section>`;
+      }
+      document.getElementById('tiles').innerHTML = html;
+      if (!me.apps.length && !me.admin) showMsg(msg, 'No apps yet. Ask a FortifyGrid admin to give you access.');
     } catch (e) {
       showMsg(msg, e.message, 'err');
     }

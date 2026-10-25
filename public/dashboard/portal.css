@@ -41,3 +41,6 @@ h3 { margin: 28px 0 8px; }
 .tab { background: transparent; color: var(--ink); border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 14px; }
 .tab.on { color: var(--green); border-bottom-color: var(--green); font-weight: 600; }
 code { background: #eee; padding: 1px 4px; border-radius: 3px; font-size: 13px; }
+.folder { margin-top: 28px; }
+.folder-title { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin: 0; }
+.folder .tiles { margin-top: 10px; }
