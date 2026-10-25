@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS app_folders (
   folder_sort INTEGER NOT NULL DEFAULT 100
 );
 
--- IDE: Comstock plant viewer at app.fortifygrid.com/ide/ (files in public/dashboard/ide/, gated in worker.js).
+-- IDE: app.fortifygrid.com/ide/, role-checked in worker.js, served by the fortifygrid-ide Worker (binding IDE).
 -- Engine (IFC / Excel): Fortify-Grid/fortifygrid-ide. Roles: viewer looks; engineer, admin also download (tab downloads).
 INSERT OR IGNORE INTO apps (id, name, description, url, roles, sort, created_at, updated_at) VALUES
   ('ide', 'IDE — Digital Engineering Model', 'Comstock BESS plant viewer: spatial, electrical, civil; measure; BOM and work statement; IFC / Excel.',
