@@ -481,6 +481,17 @@ export class Directory extends WorkerEntrypoint {
     await touch(this.env, user.email);
     return user.apps[appId] || null;
   }
+
+  // Everyone who may open appId: [{ email, name, role, last_seen_at }]. Apps use it for their own finer permissions.
+  async users(appId) {
+    const app = await getApp(this.env, appId);
+    if (!app) return [];
+    const { results } = await this.env.DB.prepare(
+      'SELECT a.email, u.name, a.role, u.last_seen_at FROM app_access a JOIN users u ON u.email = a.email WHERE a.app_id = ? AND u.active = 1 ORDER BY a.email').bind(appId).all();
+    const top = app.roles[app.roles.length - 1] || 'admin';
+    for (const email of bootstrapAdmins(this.env)) if (!results.some((r) => r.email === email)) results.push({ email, name: '', role: top, last_seen_at: null });
+    return results;
+  }
 }
 
 // app.fortifygrid.com/<path> is served from ./public/dashboard/<path>; /api/* is the portal API; /assets/* is shared.

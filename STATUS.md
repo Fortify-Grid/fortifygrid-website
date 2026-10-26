@@ -9,6 +9,7 @@ Updated 2026-10-25.
 | Login: Access team `fortifyai` (Google + email code). Access groups synced from admin | ✅ |
 | Auto-deploy on push for website, FGAI-RAG and revenue-analysis-module (repo secrets set) | ✅ |
 | Dashboard folders: Market Data = heatmap, query. BTM Agentic Tools = revenue, ide. Staging site at `/staging/` (admins) | 2026-10-24 |
+| Directory `users(appId)`: apps list who can open them (IDE uses it for per-project permissions) | 2026-10-25 |
 | IDE at **app.fortifygrid.com/ide/**: the portal checks the role and forwards to the `fortifygrid-ide` Worker (no public route) | 2026-10-25 |
 
 ## Open
