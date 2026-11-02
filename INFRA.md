@@ -72,6 +72,19 @@ Drive and Dropbox are for editing only. Git is what deploys. Rules:
 - **Wrangler:** use `CLOUDFLARE_API_TOKEN=$CF_SETUP_TOKEN CLOUDFLARE_ACCOUNT_ID=$CF_ACCOUNT_ID`. This Mac's default `wrangler login` is a different account.
 - **GitHub:** pushes must come from the `krishnanraghu` account (`gh auth switch -u krishnanraghu`).
   - CI needs the repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+- **GitHub token for a Worker** (a Worker that starts an Action or writes to git): reuse the `gh` CLI login. Do not make a
+  fine-grained token. The token goes straight from `gh` to Cloudflare and is never shown:
+  ```bash
+  set -a; . ~/.config/fortifygrid/secrets.env >/dev/null 2>&1; set +a
+  cd <worker folder> && gh auth token --user krishnanraghu | CLOUDFLARE_API_TOKEN=$CF_SETUP_TOKEN CLOUDFLARE_ACCOUNT_ID=$CF_ACCOUNT_ID npx wrangler secret put GITHUB_TOKEN
+  ```
+  - Check with `npx wrangler secret list` (names only). The Worker reads `env.GITHUB_TOKEN.trim()`.
+  - The login needs `repo` + `workflow`: `gh auth refresh --user krishnanraghu --scopes repo,workflow`, then run it again.
+  - The token reaches every repo that account can reach, not one repo. `gh auth logout` kills it: log in, run it again.
+  - A Worker that writes to git all the time uses a GitHub App instead (one repo, 1-hour tokens), as
+    revenue-analysis-module does (`GH_APP_ID`, `GH_APP_KEY`). Keep that.
+  - Dhruv's apps (`krishnandhruv4-hub`) use the same command with `--user krishnandhruv4-hub` and the default `wrangler`
+    login (`dashboard-site/INFRA-PATTERN.md`).
 - **DB URLs:** in each app's `.dev.vars` (gitignored). Each app has one read-only DB user (`<app>_ro`, 30 s statement timeout).
 
 ## Change workflow (agents)
